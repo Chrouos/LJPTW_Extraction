@@ -22,8 +22,9 @@ from processNumber import auto_translate_ch_to_int_number
 class ProcessAILA:
 
     # -v- 初始化
-    def __init__(self,  save_path, source_path, expect_folder=['test', 'problem_file', 'doing'], 
-                        mode=0, limit_counts=None, isRandomData=False):
+    def __init__(   self, 
+                    save_path, source_path, expect_folder=['test', 'problem_file', 'doing'], 
+                    mode=0, limit_counts=None, isRandomData=False):
         
         # - 預設值
         self.isRandomData = isRandomData
@@ -54,7 +55,7 @@ class ProcessAILA:
         for folder in self.source_folderList:
             files = listdir(self.source_path + folder)
             self.source_fileList[folder] = sorted(file for file in files)
-           
+        
     # -v- 計算數量
     def countLength_souce(self):
         
@@ -83,7 +84,7 @@ class ProcessAILA:
         
         # - 初始化累積的字典和計數器
         (accumulated_charge_dict, accumulated_article_dict, accumulated_criminals_dict, 
-         accumulated_total_charges, accumulated_total_article, accumulated_total_mult_criminals) = self.initialize_accumulators()
+        accumulated_total_charges, accumulated_total_article, accumulated_total_mult_criminals) = self.initialize_accumulators()
         
         total_folders = len(self.source_folderList)
         folder_progress = tqdm(self.source_folderList, desc='Processing Folders', total=total_folders)

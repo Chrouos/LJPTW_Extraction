@@ -181,92 +181,11 @@ def translate(input_str) -> str:
     traceback.print_exc()  # 打印錯誤的堆棧跟蹤
     exit()  # 終止程式
 
-  return int(arabic)
+    return int(arabic)
 
 
-# ---------------------------- 時間
-incidentTime_regex_list = [
-    "(?:主張：|上訴意旨略以：|原告主張(?:：?)|主張如下：|理由要旨[一二三四五六七八九十]、|本件上訴意旨以：).*?(\d+年\d+月\d+日(?:上午|下午|中午|晚間|晚上)?(?:\d+時)?(?:\d+時)?(?:\d+分)?).*?(?:駕駛(?!椅)|車禍|騎乘|[一二三四五六七八九十]、|，自屬有據。)",
-    "((?:原告主張|查被告因|被告於|被告於民國)(?:.*?)(\d+年\d+月\d+日(?:上午|下午|中午|晚間|晚上)?(?:\d+時)?(?:\d+時)?(?:\d+分)?)(?:.*?)(?:駕駛|不當|不慎).*?)。"
-]
-incidentTime_regex_compiled_list = [re.compile(pattern) for pattern in incidentTime_regex_list]
-
-# ---------------------------- 事發
-happened_regex_list = [
-    "(?:實體部分|事實及理由|實體方面|原告聲明)(?:.*?)(?:主張略以：|主張：|[^被]上訴人方面：|上訴意旨略以：|原告主張(?:：?)|主張如下：|理由要旨[一二三四五六七八九十]、|本件上訴意旨以：)([一二三四五六七八九十]?.*?)(?=[一二三四五六七八九十]、|，自屬有據。)",
-    "(?:主張：|上訴意旨略以：|上訴人起訴主張|原告主張(?:：?)|主張如下：|理由要旨[一二三四五六七八九十]、|本件上訴意旨以：|本件上訴人於原審起訴主張略以：|上訴人於原審起訴主張略以：)(.*?(?:駕駛(?!椅)|車禍|騎乘).*?)(?:[一二三四五六七八九十]、|，自屬有據。|(?:，為此)?，爰依)",
-    "(?:經查，)(.*?)(?=[一二三四五六七八九十]、)",
-    "((原告主張|查被告[因自]|被告於).*?(駕駛|不當|不慎|駛出).*?)(?:。|等情)",
-    "(?:查本件車禍之發生，)(.*?)。",
-    "(?:查被告駕車)((.*?肇事主因)(.*?肇事次因)?)",
-    "認定上訴人於(.*?)。",
-    "均陳稱(.*?)。"
-]
-happened_regex_compiled_list = [re.compile(pattern) for pattern in happened_regex_list]
-
-# !預先執行 re.compile 會讓後續程式碼較快
-
-# --------------------------------------------------------------------------------------------------------------------
-
-def incidentTime_regex_catch(text):
-    for regex in incidentTime_regex_compiled_list:
-        matches = list(regex.finditer(text, re.MULTILINE))
-        if matches and matches[0].group(1) != None:
-            return matches[0].group(1)
-
-    return None
-
-def happened_regex_catch(text):
-    for regex in happened_regex_compiled_list:
-        matches = list(regex.finditer(text, re.MULTILINE))
-        if matches:
-            return matches[0].group(1)
-
-    return None
-
-
-def money_regex_catch(text):
-    mainText = ''
-    mainText = re.search(r'主文(.*?)(事實|理由|書記官)', text)
-
-    if(mainText):
-        text = re.search(r'給付(.*?)原告(.*?)(新臺幣|新台幣)(.*?)元', str(mainText.group(0)))
-        text = str(text)
-
-        start_keyword = '新臺幣'
-        end_keyword = '元'
-
-        start_index = text.find(start_keyword)
-        end_index = text.find(end_keyword)
-
-        compensation = text[start_index : end_index]
-        money = ''
-
-        if(len(compensation) <= 50):
-            arabic_num = ''
-            chinese_num = ''
-            total_num = ''
-
-            for i in compensation:
-                if is_number(i) or is_chinese_number(i): total_num += i
-                if is_number(i): arabic_num += i
-                if is_chinese_number(i): chinese_num += i
-
-            if chinese_num and arabic_num:
-                money = translate(total_num)
-
-            elif arabic_num:
-                money = arabic_num
-
-            elif chinese_num:
-                money = chinese_to_arabic(chinese_num)
-
-            if money: return int(money)
-
-    return None
-  
 def chinese_to_int(text):
-  
+
     num_dict = {
         '零': '0', '０': '0',
         '壹': '1', '一': '1', '１': '1',
@@ -289,25 +208,34 @@ def chinese_to_int(text):
             process_text += char_index
     
     return process_text
-  
-  
-def auto_translate_ch_to_int_number(text):
-  return translate(chinese_to_int(text)) 
-            
 
-# if __name__ == '__main__':
-#   print(auto_translate_ch_to_int_number('十四'))
-#   print(auto_translate_ch_to_int_number('四十'))
-#   print(auto_translate_ch_to_int_number('6拾'))
-#   print(auto_translate_ch_to_int_number('6拾萬'))
-  
-#   print(auto_translate_ch_to_int_number('拾萬'))
-#   print(auto_translate_ch_to_int_number('10萬'))
-  
-#   print(auto_translate_ch_to_int_number('百萬'))
-#   print(auto_translate_ch_to_int_number('一百萬'))
-#   print(auto_translate_ch_to_int_number('1百萬'))
-#   print(auto_translate_ch_to_int_number('100萬'))
-#   print(auto_translate_ch_to_int_number('拾1'))
-  
-  
+
+def auto_translate_ch_to_int_number(text):
+  return translate(chinese_to_int(text))
+
+if __name__ == '__main__':
+
+    check_list = [
+      ('十四', 14),
+      ('四十', 40),
+      ('6拾', 60),
+      ('6拾萬', 600000),
+      ('拾萬', 100000),
+      ('10萬', 100000),
+      ('百萬', 1000000),
+      ('一百萬', 1000000),
+      ('1百萬', 1000000),
+      ('100萬', 1000000),
+      ('拾1', 11)
+    ]
+
+    for chinese, number in check_list:
+      print(auto_translate_ch_to_int_number(chinese))
+      if auto_translate_ch_to_int_number(chinese) != int(number):
+        print(f"auto_translate_ch_to_int_number('{chinese}') should be {number}")
+      # else:
+      #   print(f"'{chinese}'")
+        
+
+
+
