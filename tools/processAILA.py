@@ -22,7 +22,7 @@ from tqdm import tqdm
 import cn2an
 
 sys.path.append('./tools')
-
+from operation import chinese_to_int, convert_fullwidth_to_halfwidth
 
 
 class ProcessAILA:
@@ -91,12 +91,15 @@ class ProcessAILA:
         
         writeContent = []
         
-        (accumulated_charge_dict, accumulated_article_dict, accumulated_criminals_dict, 
-        accumulated_total_charges, accumulated_total_article, accumulated_total_mult_criminals) = self.initialize_accumulators()
+        (
+            accumulated_charge_dict, accumulated_article_dict, accumulated_criminals_dict, 
+            accumulated_penalty_dict, accumulated_reason_dict,
+            
+            accumulated_total_charges, accumulated_total_article, accumulated_total_mult_criminals,
+            accumulated_total_penalty, accumulated_total_reason
+        ) = self.initialize_accumulators()
         
-        self.save_results(accumulated_criminals_dict, 'criminals', accumulated_total_mult_criminals)
-        self.save_results(accumulated_charge_dict, 'charges', accumulated_total_charges)
-        self.save_results(accumulated_article_dict, 'article', accumulated_total_article)
+        self.check_and_create_files(['charges', 'article', 'criminals', 'penalty', 'reason'])
         
         # @ 計算時間
         folders_counts = len(self.source_folderList)
@@ -136,77 +139,111 @@ class ProcessAILA:
                 content_charge_judgment = self.re_charges(content_split[1], r'裁判案由：(.+)')
                 criminals_list = self.re_criminals(content_split[0])
                 main_text = self.re_main_text(content_split[1])
-                amount_list, total_amount = self.re_amount(main_text)   
-                imprisonment_list, total_imprisonment = self.re_imprisonment(main_text)
+                amount_list, total_amount = self.re_amount(main_text, fileName)   
+                imprisonment_list, total_imprisonment = self.re_imprisonment(main_text, fileName)
                 imprisonment_count, amount_count = len(imprisonment_list), len(amount_list)
                 
-                reason = self.re_reason(main_text, amount_count, imprisonment_count)
+                reason = self.re_reason(main_text, amount_count, imprisonment_count, fileName)
+                penalty = self.re_penalty(amount_count, imprisonment_count)
                 
                 # @ 存擋格式
                 content_dict = {
                     "file": fileName,
                     "fact": self.re_fact(content_split[0]), 
+                    "main_text": main_text,   # 判決主文
                     "meta": {
+                        
+                        "#_relevant_articles": total_article,               # article 的數量
                         "relevant_articles": article_list,                  # law, article
                         "relevant_articles_org": original_article_list,     # law + article
-                        "#_relevant_articles": total_article,               # article 的數量
                         
+                        
+                        "#_relevant_articles_judge": total_article_judge,               # article 的數量 下半部(裁判)
                         "relevant_articles_judge": article_list_judge,                  # law, article 下半部(裁判)
                         "relevant_articles_org_judge": original_article_list_judge,     # law + article 下半部(裁判)
-                        "#_relevant_articles_judge": total_article_judge,               # article 的數量 下半部(裁判)
+                        
+                        "#_criminals": len(criminals_list),                 # 犯罪者的數量
+                        "criminals": criminals_list,                        # 犯罪者們
                         
                         "indictment_accusation": content_charge_indictment, # 起訴書案由
                         "judgment_accusation": content_charge_judgment,     # 裁判書案由
-                        "criminals": criminals_list,                        # 犯罪者們
-                        "#_criminals": len(criminals_list),                 # 犯罪者的數量
                         
-                        "main_text": main_text,   # 判決主文
                         "term_of_imprisonment": {
+                            
                             "death_penalty": self.death_penalty(main_text),              # 死刑
                             "life_imprisonments": self.re_life_imprisonment(main_text),  # 無期徒刑 
                             
-                            "imprisonments": imprisonment_list,             # 刑期 List 
                             "#_imprisonments": imprisonment_count,      # 刑期 數量  
+                            "imprisonments": imprisonment_list,             # 刑期 List 
                             "total_imprisonment_month": total_imprisonment, # 總共刑期時間 
                             
-                            "amounts" : amount_list,                # 罰金 List
                             "#_amounts": amount_count,       # 罰金數量
+                            "amounts" : amount_list,                # 罰金 List
                             "total_amount": total_amount,           # 罰金總額
                         }
                     },
                     
                     "reason": reason,       # 有罪、無罪、免刑、不受理
-                    "penalty": self.re_penalty(amount_count, imprisonment_count),      # 刑期(#2)、罰金(#3)、無
-                    "punishment": self.punishment(reason)     # 是(有罪)、否(無罪、免刑、不受理)
+                    "penalty": penalty,      # 刑期(#2)、罰金(#3)、無
+                    "punishment": self.punishment(reason),     # 是(有罪)、否(無罪、免刑、不受理)
                     
-                    # "ori_indictment_content": content_split[0],
-                    # "ori_judgment_content": content_split[1]
+                    "ori_indictment_content": content_split[0],
+                    "ori_judgment_content": content_split[1]
                 }
                 
                 # - 計數器
+                
+                # @ Reason 狀況
+                accumulated_reason_dict[REASON(reason).name] += 1
+                accumulated_total_reason += 1
+                self.save_results(accumulated_reason_dict, 'reason', accumulated_total_reason)
+                
+                # @ Penalty 狀況
+                accumulated_penalty_dict[PENALTY(penalty).name] += 1
+                accumulated_total_penalty += 1
+                self.save_results(accumulated_penalty_dict, 'penalty', accumulated_total_penalty)
+                
                 # @ 多人犯罪者
                 accumulated_criminals_dict[len(criminals_list)] += 1
                 accumulated_total_mult_criminals += 1
-                    
                 self.save_results(accumulated_criminals_dict, 'criminals', accumulated_total_mult_criminals)
                 
-                # @ 起訴書、簡易判決處刑書： 擷取 charge
+                # @ 起訴書、簡易判決處刑書： charge
                 if content_charge_indictment != "":
                     accumulated_total_charges += 1
                     accumulated_charge_dict[content_charge_indictment] += 1
-                    
                 self.save_results(accumulated_charge_dict, 'charges', accumulated_total_charges)
                     
                 # @ 法條數量
                 accumulated_total_article += total_article
                 for key in original_article_list:
                     accumulated_article_dict[key] += 1
-                    
                 self.save_results(accumulated_article_dict, 'article', accumulated_total_article)
             
-            # @ 存入 JSON
-            writeContent.append(content_dict)
+                # @ 存入 JSON
+                writeContent.append(content_dict)
+            
+        # - 儲存檔案
+        save_file_path = f"{self.save_path}/TWLJP/"
+        file_name = "all_data.json"
+        json_content = "\n".join([json.dumps(item, ensure_ascii=False) for item in writeContent])
+        self.check_and_create_directories(self.save_path, ['TWLJP'])   # = 路徑防呆
+        self.save_to_file(f"{save_file_path}{file_name}", json_content)
                 
+        # - 在文件處理完畢後保存結果
+        
+        logging.info(f"這次總共取樣 {total_count} 筆資料")
+        logging.info(f"re_criminals 總共 {accumulated_total_mult_criminals}, 1個犯罪者: {accumulated_criminals_dict[1]}, 0個犯罪者的: {accumulated_criminals_dict[0]}")
+        logging.info(f"re_article 總共 {accumulated_total_article}")
+        logging.info(f"re_charges 總共 {accumulated_total_charges}")
+        logging.info(f"re_reason 總共 {accumulated_total_reason}")
+        logging.info(f"re_penalty 總共 {accumulated_total_penalty}")
+
+    
+    def filter_TWLJP(self):
+        
+        with open(f"{self.save_path}charges/charges_count.txt", 'r', encoding='utf-8') as file:
+            return {line.split(',')[0].strip() for line in file}
                 
     # ---------------------------------------------------------------------------------------------------- 判決書細項目
     def split_content_by_separator(self, content, separator):
@@ -364,7 +401,7 @@ class ProcessAILA:
                     article_number = re.search(r'第(\d+)條', part)
                     if article_number:
                         # matches.append(f'{current_prefix}第{article_number.group(1)}條')
-                        converted_text = self.fullwidth_to_halfwidth(article_number.group(1))
+                        converted_text = convert_fullwidth_to_halfwidth(article_number.group(1))
                         matches.append([f'{current_prefix}', f'第{converted_text}條'])
                     break  
                 
@@ -373,7 +410,7 @@ class ProcessAILA:
                     article_number = re.search(r'第(\d+)條', part)
                     if article_number:
                         # matches.append(f'{current_prefix}第{article_number.group(1)}條')
-                        converted_text = self.fullwidth_to_halfwidth(article_number.group(1))
+                        converted_text = convert_fullwidth_to_halfwidth(article_number.group(1))
                         matches.append([f'{current_prefix}', f'第{converted_text}條'])
                         
 
@@ -458,117 +495,59 @@ class ProcessAILA:
             if line.strip() == '':
                 continue
             
-            text = line.replace(u'\u3000', u' ').replace(u'\xa0', u' ').strip()
-
-            # 後文到了則停止
-            temp_pattern = re.compile(r'^\s*(犯\s*罪\s*事\s*實\s*及\s*理\s*由|犯\s*罪\s*事\s*實|事\s*實\s*及\s*理\s*由|事\s*實|理\s*由|犯\s*罪\s*事\s*實\s*及\s*證\s*據\s*名\s*稱)\s*$')
-            if temp_pattern.search(line) or ('犯' in line and '罪' in line and '事' in line and '實' in line) or  ('理' in line and '由' in line and '事' in line and '實' in line):
-                is_main_text = False
-                break
+            text = re.sub(r'\s', '', line).replace(u'\u3000', u' ').replace(u'\xa0', u' ').strip()
+            print(text)
+            # @ 後文到了則停止
+            stop_list = [
+                "理由", "事實",
+                "犯罪事實理由", "犯罪事實", "犯罪事實及證據名稱", "事實及理由", "犯罪事實及理由"
+            ]
+            for stop_term in stop_list:
+                if text == stop_term:
+                    is_main_text = False
             
             # @ 擷取 extraction
             if is_main_text:
                 result_main_text += text
                 
-            # 前文找到則開始
-            temp_pattern = re.compile(r'^\s*主\s*文\s*$')
-            if temp_pattern.search(line):
+            # @ 前文找到則開始
+            if text == '主文':
                 is_main_text = True
         
         return result_main_text
     
-    def re_amount(self, line):
-        pattern = re.compile(r"罰金新臺幣([\u4e00-\u9fff]+)元")
-        matches = pattern.findall(line)  # 使用 findall 來找到所有匹配
+    def re_imprisonment(self, line, fileName):
         
-        amount_list = []
-        for match in matches:
-            regular_match = cn2an.cn2an(match, 'smart')
-            amount_list.append(regular_match)  # 將每個匹配的金額添加到列表中
-
-        return amount_list, sum(amount_list)
-    
-    def re_imprisonment(self, line):
-        
-        def parse_time(time_str):
+        def parse_time(time_str, line, fileName):
             # 解析時間字符串，返回年、月、日的數值
             try:
-                return cn2an.cn2an(self.chinese_to_int(time_str) if time_str != '' else 0, 'smart')
+                return int(cn2an.cn2an(chinese_to_int(time_str) if time_str != '' else 0, 'smart'))
             except ValueError as e:
-                print(f"轉換錯誤：'{time_str}' 轉換失敗。錯誤訊息：{e}")
+                logging.error(f"{fileName} 錯誤發生在此行: {line}, 相關匹配: {time_str}")
+                logging.error(f"錯誤詳情: {e}")
                 return 0
         
         imprisonments = []
-        total_imprisonment = 0
+        total_imprisonment = 0  
         
         if '年' in line or '月' in line or '日' in line:
-
-            # 有期徒刑的正則表達式
-            pattern_imprisonment = re.compile(r'有期徒刑(?:([\u4e00-\u9fff]{1,2})年)?(?:([\u4e00-\u9fff]{1,2})月)?(?:(?:又)([\u4e00-\u9fff]{1,2})日)?')
-            matches_imprisonment = pattern_imprisonment.findall(line)
+            # 合併正則表達式
+            pattern = re.compile(r'(有期徒刑|拘役)(?:(?:以)?([\u4e00-\u9fff]{1,2})年)?(?:([\u4e00-\u9fff]{1,2})月)?(?:又?([\u4e00-\u9fff]{1,2})日)?')
+            matches = pattern.findall(line)
             
-            for match in matches_imprisonment:
-                years, months, days = match
+            for match in matches:
+                sentence_type, years, months, days = match
 
-                if not (years or months or days):
-                    continue
-                try:
-                    years = cn2an.cn2an((self.chinese_to_int(years)) if years != '' else 0, 'smart')
-                except ValueError as e:
-                    logging.info(f"轉換錯誤：年份 '{years}' 轉換失敗。錯誤訊息：{e} \n{match}: {line}")
-                    years = 0  
+                years_val = parse_time(years, line, fileName)
+                months_val = parse_time(months, line, fileName)
+                days_val = parse_time(days, line, fileName)
 
-                try:
-                    months = cn2an.cn2an(self.chinese_to_int(months) if months != '' else 0, 'smart')
-                except ValueError as e:
-                    logging.info(f"轉換錯誤：月份 '{months}' 轉換失敗。錯誤訊息：{e} \n{match}: {line}")
-                    months = 0  
-
-                try:
-                    days = cn2an.cn2an(self.chinese_to_int(days) if days != '' else 0, 'smart')
-                except ValueError as e:
-                    logging.info(f"轉換錯誤：日數 '{days}' 轉換失敗。錯誤訊息：{e} \n{match}: {line}")
-                    days = 0  
-
-                if years != 0 or months != 0 or days != 0:
-                    imprisonment_str = f"有期徒刑{years}年{months}月{days}日" if days else f"有期徒刑{years}年{months}月"
+                if years_val != 0 or months_val != 0 or days_val != 0:
+                    imprisonment_str = f"{sentence_type}{years_val}年{months_val}月{days_val}日" if days else f"{sentence_type}{years_val}年{months_val}月"
                     imprisonments.append(imprisonment_str)
                     
-                total_imprisonment += (years * 12) + months + (days / 30)
-
-            # 處拘役的正則表達式
-            pattern_detention = re.compile(r'處拘役(?:([\u4e00-\u9fff]{1,2})年)?(?:([\u4e00-\u9fff]{1,2})月)?(?:([\u4e00-\u9fff]{1,2})日)?')
-            matches_detention = pattern_detention.findall(line)
-
-            for match in matches_detention:
-                years, months, days = match
-                
-                if not (years or months or days):
-                    continue
-                try:
-                    years = cn2an.cn2an(self.chinese_to_int(years) if years != '' else 0, 'smart')
-                except ValueError as e:
-                    print(f"轉換錯誤：年份 '{years}' 轉換失敗。錯誤訊息：{e} \n{match}: {line}")
-                    years = 0  
-
-                try:
-                    months = cn2an.cn2an(self.chinese_to_int(months) if months != '' else 0, 'smart')
-                except ValueError as e:
-                    print(f"轉換錯誤：月份 '{months}' 轉換失敗。錯誤訊息：{e} \n{match}: {line}")
-                    months = 0  
-
-                try:
-                    days = cn2an.cn2an(self.chinese_to_int(days) if days != '' else 0, 'smart')
-                except ValueError as e:
-                    print(f"轉換錯誤：日數 '{days}' 轉換失敗。錯誤訊息：{e} \n{match}: {line}")
-                    days = 0  
+                total_imprisonment += (years_val * 12) + months_val + (days_val / 30)
                     
-                if years != 0 or months != 0 or days != 0:
-                    detention_str = f"拘役{years}年{months}月{days}日" if days else f"拘役:{years}年{months}月"
-                    imprisonments.append(detention_str)
-                    
-                total_imprisonment += (years * 12) + months + (days / 30)
-                
         return imprisonments, math.ceil(total_imprisonment)
     
     def re_life_imprisonment(self, line):
@@ -587,18 +566,23 @@ class ProcessAILA:
             
         return result
     
-    def re_amount(self, line):
+    def re_amount(self, line, fileName):
+        
         pattern = re.compile(r"罰金新臺幣([\u4e00-\u9fff]+)元")
         matches = pattern.findall(line)  # 使用 findall 來找到所有匹配
         
         amount_list = []
         for match in matches:
-            regular_match = cn2an.cn2an(self.chinese_to_int(match), 'smart')
-            amount_list.append(regular_match)  # 將每個匹配的金額添加到列表中
+            try:
+                regular_match = cn2an.cn2an(chinese_to_int(match), 'smart')
+                amount_list.append(regular_match)  
+            except Exception as e:
+                logging.error(f"{fileName} 錯誤發生在此行: {line}, 相關匹配: {match}")
+                logging.error(f"錯誤詳情: {e}")
 
         return amount_list, sum(amount_list)
     
-    def re_reason(self, line, amount_count, imprisonment_count):
+    def re_reason(self, line, amount_count, imprisonment_count, fileName):
         """
             (0) 無罪
             (1) 有罪
@@ -614,6 +598,10 @@ class ProcessAILA:
             result = 3
         if amount_count != 0 or imprisonment_count != 0:
             result = 1
+            
+        if result == -1:
+            logging.error(f"re_reason {fileName} 擷取失敗 {line}")
+            logging.error(f"    amount_count: {amount_count}, imprisonment_count: {imprisonment_count}")
             
         return result
     
@@ -656,24 +644,17 @@ class ProcessAILA:
         with open(save_file_path, 'w', encoding='utf-8') as writeFile:
             for reason, count in sorted_case_reasons:
                 writeFile.write(f"{reason}, {count}\n")
+                
+            writeFile.write(f"TOTAL, {accumulated_total}\n")
+            
 
         # 僅保存案由
         save_file_path = f"{self.save_path}{file_type}/{file_type}.txt"
         with open(save_file_path, 'w', encoding='utf-8') as writeFile:
             for reason, _ in sorted_case_reasons:
-                writeFile.write(f"{reason}\n")        
-        
-    # -v- 全行文字轉半形
-    def fullwidth_to_halfwidth(self, text):
-        result = ""
-        for char in text:
-            code = ord(char)
-            if 0xFF10 <= code <= 0xFF19:  # 全形數字的範圍
-                halfwidth_char = chr(code - 0xFEE0)
-                result += halfwidth_char
-            else:
-                result += char
-        return result
+                writeFile.write(f"{reason}\n")   
+    
+    
     
     def save_to_json(self, save_file_path, filename, writeContent, comment=''):
         """
@@ -713,6 +694,22 @@ class ProcessAILA:
             if not path.isdir(full_path):
                 mkdir(full_path)
                 
+    def check_and_create_files(self, required_dirs=['charges', 'article', 'criminals', 'penalty']):
+        for dir in required_dirs:
+            # 檢查目錄是否存在，若不存在則創建
+            directory_path = path.join(self.save_path, dir)
+            if not path.exists(directory_path):
+                mkdir(directory_path)
+
+            # 為每個目錄創建兩個檔案
+            for file_name in [f"{dir}.txt", f"{dir}_count.txt"]:
+                file_path = path.join(directory_path, file_name)
+                with open(file_path, 'w', encoding='utf-8') as writeFile:
+                    pass 
+                
+            
+        
+                
     # -v- 初始化 logging
     def initialize_logging(self, save_path):
         log_file_path = f'{save_path}log/ProcessAILA.log'
@@ -723,41 +720,30 @@ class ProcessAILA:
     
     # -v- 新增的 initialize_accumulators 方法
     def initialize_accumulators(self):
+        
+        # - 字典
         accumulated_charge_dict = defaultdict(int)
         accumulated_article_dict = defaultdict(int)
         accumulated_criminals_dict = defaultdict(int)
+        accumulated_penalty_dict = defaultdict(int)
+        accumulated_reason_dict = defaultdict(int)
+        
+        # - 數量
         accumulated_total_charges = 0
         accumulated_total_article = 0
         accumulated_total_mult_criminals = 0
+        accumulated_total_penalty = 0
+        accumulated_total_reason = 0
 
-        return (accumulated_charge_dict, accumulated_article_dict, accumulated_criminals_dict, 
-                accumulated_total_charges, accumulated_total_article, accumulated_total_mult_criminals)
-        
-        
-    def chinese_to_int(self, text):
-
-        num_dict = {
-            '零': '0', '０': '0',
-            '壹': '1', '一': '1', '１': '1',
-            '貳': '2', '二': '2', '２': '2',
-            '參': '3', '三': '3', '叁': '3', '参': '3', '３': '3',
-            '肆': '4', '四': '4', '４': '4',
-            '伍': '5', '五': '5', '５': '5',
-            '陸': '6', '六': '6', '６': '6',
-            '柒': '7', '七': '7', '７': '7',
-            '捌': '8', '八': '8', '８': '8',
-            '玖': '9', '九': '9', '９': '9',
+        return (
+            accumulated_charge_dict, accumulated_article_dict, accumulated_criminals_dict, 
+            accumulated_penalty_dict, accumulated_reason_dict,
             
-        }
+            accumulated_total_charges, accumulated_total_article, accumulated_total_mult_criminals,
+            accumulated_total_penalty, accumulated_total_reason
+        )
         
-        process_text = ''
-        for char_index in text:
-            if char_index in num_dict:
-                process_text += str(num_dict[char_index])
-            else:
-                process_text += char_index
-        
-        return process_text
+
     
 
 # ---------------------------------------------------------------------------------------------------- Default implementation    
@@ -776,6 +762,21 @@ class Mode(Enum):
         else:
             return Mode.FORMAL_EXPECT_PROBLEM
         
+
+class REASON(Enum):
+    
+    未抓取成功 = -1
+    無罪 = 0
+    有罪 = 1
+    免刑 = 2
+    不受理 = 3
+    
+class PENALTY(Enum):
+    
+    無 = 0
+    刑期 = 1
+    罰金 = 2
+    刑期與罰金 = 3
         
 class TaiwanTimeFormatter(logging.Formatter):
     converter = time.localtime

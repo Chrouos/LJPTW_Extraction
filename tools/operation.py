@@ -35,3 +35,29 @@ def convert_fullwidth_to_halfwidth(text):
         result.append(chr(code))
         
     return ''.join(result)
+
+def chinese_to_int(text):
+
+    num_dict = {
+        # '零': '0', 
+        '０': '零',
+        '壹': '1', '一': '1', '１': '1',
+        '貳': '2', '二': '2', '２': '2',
+        '參': '3', '三': '3', '叁': '3', '参': '3', '３': '3',
+        '肆': '4', '四': '4', '４': '4',
+        '伍': '5', '五': '5', '５': '5',
+        '陸': '6', '六': '6', '６': '6',
+        '柒': '7', '七': '7', '７': '7',
+        '捌': '8', '八': '8', '８': '8',
+        '玖': '9', '九': '9', '９': '9',
+        
+    }
+    
+    process_text = ''
+    for char_index in text:
+        if char_index in num_dict:
+            process_text += str(num_dict[char_index])
+        else:
+            process_text += char_index
+    
+    return process_text

@@ -18,11 +18,12 @@ processData = ProcessAILA(
     save_path='./data/processed/',
     mode=mode_arg,
     limit_counts=count_arg,
-    isRandomData=True
+    isRandomData=False
 )
 
-processData.countLength_source()
+# processData.countLength_source()
 processData.TWLJP_JSON()
+processData.filter_TWLJP()
 
 # processData.remove_multiple_criminals() # = 刪掉多犯罪者
 # processData.random_samples(file_path="/TWLJP/sigleCriminal_allData.json", random_size=10)   # = 隨機抽樣, 預設為 10
