@@ -48,7 +48,7 @@ class ProcessAILA:
         source_folders = listdir(self.source_path)
         mode = Mode.from_string(mode)
         
-        # # - 模式
+        # - 模式
         if mode == Mode.TEST:
             self.source_folderList = [folder for folder in source_folders if folder == 'test']
         elif mode == Mode.DOING:
@@ -63,7 +63,7 @@ class ProcessAILA:
         self.source_fileList= {} 
         for folder in self.source_folderList:
             files = listdir(self.source_path + folder)
-            self.source_fileList[folder] = sorted(file for file in files)
+            self.source_fileList[folder] = sorted(file for file in files if file != '.DS_Store')
                 
     # -v- 計算總共數量
     def countLength_source(self):
@@ -91,15 +91,7 @@ class ProcessAILA:
         
         writeContent = []
         
-        (
-            accumulated_charge_dict, accumulated_article_dict, accumulated_criminals_dict, 
-            accumulated_penalty_dict, accumulated_reason_dict,
-            
-            accumulated_total_charges, accumulated_total_article, accumulated_total_mult_criminals,
-            accumulated_total_penalty, accumulated_total_reason
-        ) = self.initialize_accumulators()
-        
-        self.check_and_create_files(['charges', 'article', 'criminals', 'penalty', 'reason'])
+        self.check_and_create_files(['charges', 'article', 'criminals', 'penalty', 'reason', 'error', 'charge_article'])
         
         # @ 計算時間
         folders_counts = len(self.source_folderList)
@@ -125,7 +117,7 @@ class ProcessAILA:
             for fileName in tqdm(limit_fileList, desc='Processing Files', leave=False):
                 file_path = f"{self.source_path}{folder_name}/{fileName}"
                 
-                with open(file_path, 'r', encoding='utf-8') as file:
+                with open(file_path, 'r', encoding='utf-8', errors='replace') as file:
                     content = file.readlines()
                     
                     # @ 獲取資料
@@ -133,15 +125,21 @@ class ProcessAILA:
                     content_split = self.split_content_by_separator(content, separator) # = [0]第一段：起訴書, 簡易判決  |  [1]第二段：裁判書   
                 
                 # @ 變數
-                original_article_list, article_list, total_article,  = self.re_article(content_split[0]) 
-                original_article_list_judge, article_list_judge, total_article_judge,  = self.re_article(content_split[1]) 
-                content_charge_indictment = self.re_charges(content_split[0]) 
-                content_charge_judgment = self.re_charges(content_split[1], r'裁判案由：(.+)')
+                fact = self.re_fact(content_split[0], fileName)
+                main_text = self.re_main_text(content_split[1], fileName)
+                
+                relevant_articles_org, article_list, total_article,  = self.re_article(content_split[0]) 
+                relevant_articles_org_judge, article_list_judge, total_article_judge,  = self.re_article(content_split[1]) 
                 criminals_list = self.re_criminals(content_split[0])
-                main_text = self.re_main_text(content_split[1])
-                amount_list, total_amount = self.re_amount(main_text, fileName)   
+                indictment_accusation = self.re_charges(content_split[0]) 
+                judgment_accusation = self.re_charges(content_split[1], r'裁判案由：(.+)')
+                
                 imprisonment_list, total_imprisonment = self.re_imprisonment(main_text, fileName)
+                amount_list, total_amount = self.re_amount(main_text, fileName)   
                 imprisonment_count, amount_count = len(imprisonment_list), len(amount_list)
+                
+                death_penalty = self.death_penalty(main_text)
+                life_imprisonments = self.re_life_imprisonment(main_text)
                 
                 reason = self.re_reason(main_text, amount_count, imprisonment_count, fileName)
                 penalty = self.re_penalty(amount_count, imprisonment_count)
@@ -149,29 +147,29 @@ class ProcessAILA:
                 # @ 存擋格式
                 content_dict = {
                     "file": fileName,
-                    "fact": self.re_fact(content_split[0]), 
+                    "fact": fact, 
                     "main_text": main_text,   # 判決主文
                     "meta": {
                         
                         "#_relevant_articles": total_article,               # article 的數量
                         "relevant_articles": article_list,                  # law, article
-                        "relevant_articles_org": original_article_list,     # law + article
+                        "relevant_articles_org": relevant_articles_org,     # law + article
                         
                         
                         "#_relevant_articles_judge": total_article_judge,               # article 的數量 下半部(裁判)
                         "relevant_articles_judge": article_list_judge,                  # law, article 下半部(裁判)
-                        "relevant_articles_org_judge": original_article_list_judge,     # law + article 下半部(裁判)
+                        "relevant_articles_org_judge": relevant_articles_org_judge,     # law + article 下半部(裁判)
                         
                         "#_criminals": len(criminals_list),                 # 犯罪者的數量
                         "criminals": criminals_list,                        # 犯罪者們
                         
-                        "indictment_accusation": content_charge_indictment, # 起訴書案由
-                        "judgment_accusation": content_charge_judgment,     # 裁判書案由
+                        "indictment_accusation": indictment_accusation, # 起訴書案由
+                        "judgment_accusation": judgment_accusation,     # 裁判書案由
                         
                         "term_of_imprisonment": {
                             
-                            "death_penalty": self.death_penalty(main_text),              # 死刑
-                            "life_imprisonments": self.re_life_imprisonment(main_text),  # 無期徒刑 
+                            "death_penalty": death_penalty,              # 死刑
+                            "life_imprisonments": life_imprisonments,  # 無期徒刑 
                             
                             "#_imprisonments": imprisonment_count,      # 刑期 數量  
                             "imprisonments": imprisonment_list,             # 刑期 List 
@@ -191,34 +189,7 @@ class ProcessAILA:
                     "ori_judgment_content": content_split[1]
                 }
                 
-                # - 計數器
                 
-                # @ Reason 狀況
-                accumulated_reason_dict[REASON(reason).name] += 1
-                accumulated_total_reason += 1
-                self.save_results(accumulated_reason_dict, 'reason', accumulated_total_reason)
-                
-                # @ Penalty 狀況
-                accumulated_penalty_dict[PENALTY(penalty).name] += 1
-                accumulated_total_penalty += 1
-                self.save_results(accumulated_penalty_dict, 'penalty', accumulated_total_penalty)
-                
-                # @ 多人犯罪者
-                accumulated_criminals_dict[len(criminals_list)] += 1
-                accumulated_total_mult_criminals += 1
-                self.save_results(accumulated_criminals_dict, 'criminals', accumulated_total_mult_criminals)
-                
-                # @ 起訴書、簡易判決處刑書： charge
-                if content_charge_indictment != "":
-                    accumulated_total_charges += 1
-                    accumulated_charge_dict[content_charge_indictment] += 1
-                self.save_results(accumulated_charge_dict, 'charges', accumulated_total_charges)
-                    
-                # @ 法條數量
-                accumulated_total_article += total_article
-                for key in original_article_list:
-                    accumulated_article_dict[key] += 1
-                self.save_results(accumulated_article_dict, 'article', accumulated_total_article)
             
                 # @ 存入 JSON
                 writeContent.append(content_dict)
@@ -230,21 +201,138 @@ class ProcessAILA:
         self.check_and_create_directories(self.save_path, ['TWLJP'])   # = 路徑防呆
         self.save_to_file(f"{save_file_path}{file_name}", json_content)
                 
-        # - 在文件處理完畢後保存結果
+
         
-        logging.info(f"這次總共取樣 {total_count} 筆資料")
+    def remove_multiple_criminals(self):
+        
+        all_data = self.load_data('/TWLJP/all_data.json')
+        single_data = []
+        for data in all_data:
+            if data['meta']['#_criminals'] == 1 or data['meta']['#_criminals'] == 0 :
+                single_data.append(data)
+        
+        with open(f'{self.save_path}TWLJP/sigleCriminal_allData.json', 'w', encoding='utf-8') as file:
+            for item in single_data:
+                file.write(json.dumps(item, ensure_ascii=False))
+                file.write('\n')
+                
+        logging.info(f"刪除多個犯罪者: {len(all_data)} -> {len(single_data)} (-{len(all_data) - len(single_data)})")
+        
+    # def filter_TWLJP(self):
+        
+    #     with open(f"{self.save_path}charges/charges_count.txt", 'r', encoding='utf-8') as file:
+    #         return {line.split(',')[0].strip() for line in file}
+    
+    
+    def counting_status(self):
+        (
+            accumulated_charge_dict, accumulated_article_dict, accumulated_combine_charge_article_dict,
+            accumulated_criminals_dict, accumulated_penalty_dict, accumulated_reason_dict,
+            accumulated_error_dict,
+            
+            accumulated_total_charges, accumulated_total_article, accumulated_total_combine_charge_article,
+            accumulated_total_mult_criminals, accumulated_total_penalty, accumulated_total_reason,
+            accumulated_total_error
+            
+        ) = self.initialize_accumulators()
+        
+        all_data = self.load_data()
+        for data in all_data:
+            
+            # - 計數器
+                
+            # @ Reason 狀況
+            accumulated_reason_dict[REASON(data['reason']).name] += 1
+            accumulated_total_reason += 1
+            self.save_results(accumulated_reason_dict, 'reason', accumulated_total_reason)
+        
+            # @ Penalty 狀況
+            accumulated_penalty_dict[PENALTY(data['penalty']).name] += 1
+            accumulated_total_penalty += 1
+            self.save_results(accumulated_penalty_dict, 'penalty', accumulated_total_penalty)
+        
+            # @ 多人犯罪者
+            accumulated_criminals_dict[data['meta']['#_criminals']] += 1
+            accumulated_total_mult_criminals += 1
+            self.save_results(accumulated_criminals_dict, 'criminals', accumulated_total_mult_criminals)
+        
+            # @ 起訴書、簡易判決處刑書： charge
+            if data['meta']['indictment_accusation'] != "":
+                accumulated_total_charges += 1
+                accumulated_charge_dict[data['meta']['indictment_accusation']] += 1
+            self.save_results(accumulated_charge_dict, 'charges', accumulated_total_charges)
+            
+            # @ 法條數量: article
+            accumulated_total_article += data['meta']['#_relevant_articles']
+            for key in data['meta']['relevant_articles_org']:
+                accumulated_article_dict[key] += 1
+            self.save_results(accumulated_article_dict, 'article', accumulated_total_article)
+        
+            # @ article + charge
+            for article in data['meta']['relevant_articles_org']:
+                combined_key = f"{article}-{data['meta']['indictment_accusation']}"
+                accumulated_combine_charge_article_dict[combined_key] += 1
+                accumulated_total_combine_charge_article += 1
+            self.save_results(accumulated_combine_charge_article_dict, 'charge_article', accumulated_total_combine_charge_article)
+        
+            # @ ERROR
+            if data['main_text'] == '':
+                accumulated_error_dict['main_text'] += 1
+            if data['fact'] == '':
+                accumulated_error_dict['fact'] += 1
+            if data['reason'] == -1:
+                accumulated_error_dict['reason'] += 1
+            if data['meta']['indictment_accusation'] == '':
+                accumulated_error_dict['indictment_accusation'] += 1
+            if data['meta']['judgment_accusation'] == '':
+                accumulated_error_dict['judgment_accusation'] += 1
+            self.save_results(accumulated_error_dict, 'error', '')
+            
+        # - 在文件處理完畢後保存結果
+        logging.info(f"這次總共取樣 {len(all_data)} 筆資料")
         logging.info(f"re_criminals 總共 {accumulated_total_mult_criminals}, 1個犯罪者: {accumulated_criminals_dict[1]}, 0個犯罪者的: {accumulated_criminals_dict[0]}")
         logging.info(f"re_article 總共 {accumulated_total_article}")
         logging.info(f"re_charges 總共 {accumulated_total_charges}")
         logging.info(f"re_reason 總共 {accumulated_total_reason}")
         logging.info(f"re_penalty 總共 {accumulated_total_penalty}")
-
-    
-    def filter_TWLJP(self):
         
-        with open(f"{self.save_path}charges/charges_count.txt", 'r', encoding='utf-8') as file:
-            return {line.split(',')[0].strip() for line in file}
+        
+    # def random_samples(self, random_size = 10, file_path="/TWLJP/all_data.json"):
+        
+    #     save_path = f'{self.save_path}TWLJP/random.json'
+    #     print(f"Do the [random_samples] (size={random_size}) from={file_path}, in={save_path}")
+        
+    #     all_data = self.load_data(file_path)
+    #     if len(all_data) > random_size:
+    #         random_data = random.sample(all_data, random_size)
+    #     else:
+    #         print(f"random_size({random_size}) < total_size({len(all_data)})")
+    #         random_data = all_data
+        
+    #     # 隨機抽取 random_size 筆數據
+    #     with open(save_path, 'w', encoding='utf-8') as file:
+    #         for item in random_data:
+    #             file.write(json.dumps(item, ensure_ascii=False))
+    #             file.write('\n')
                 
+    # # 拆檔案 test_size validation_size
+    # def train_test_split(self, file_path="/TWLJP/all_data.json", test_size=0.2, validation_size=0.1):
+        
+    #     # 獲取檔案 all_data 拆檔案
+        
+    #     all_data = self.load_data(file_path)
+        
+    #     train_data, test_data = train_test_split(all_data, test_size=test_size) # 分割訓練集和測試集
+    #     train_data, validation_data = train_test_split(train_data, test_size=validation_size / (1 - test_size)) # 再從訓練集中分割出驗證集
+
+    #     # 將分割後的資料儲存為不同的檔案
+    #     for data, suffix in zip([train_data, test_data, validation_data], ['train', 'test', 'validation']):
+    #         with open(f'{self.save_path}TWLJP/{suffix}.json', 'w', encoding='utf-8') as file:
+    #             for item in data:
+    #                 file.write(json.dumps(item, ensure_ascii=False))
+    #                 file.write('\n')
+    
+    
     # ---------------------------------------------------------------------------------------------------- 判決書細項目
     def split_content_by_separator(self, content, separator):
         
@@ -267,7 +355,7 @@ class ProcessAILA:
 
         return content_before_separator, content_after_separator
     
-    def re_fact(self, content):
+    def re_fact(self, content, fileName):
         
         is_fact = False # 是否是擷取位置
         result = ""     # 結果
@@ -282,16 +370,23 @@ class ProcessAILA:
             if line.strip() == '':
                 continue
             
-            text = line.replace(u'\u3000', u' ').replace(u'\xa0', u' ').strip()
+            text = re.sub(r'\s', '', line).replace(u'\u3000', u' ').replace(u'\xa0', u' ').strip()
             start_index = 0
 
             # STOP: 後文到了則停止
-            if end_pattern.search(text):
-                is_fact = False
+            stop_list = [
+                "證據並所犯法條", "證據", "所犯法條"
+            ]
+            for stop_term in stop_list:
+                if text == stop_term:
+                    is_fact = False
             
             # START:
             if '犯罪事實：' in text:
-                start_index = line.index('犯罪事實：') + len('犯罪事實：')
+                start_index = text.index('犯罪事實：') + 5
+                is_fact = True
+            elif '一、' in text:
+                start_index = text.index('一、') + 2
                 is_fact = True
                 
             # @ 擷取 extraction
@@ -299,10 +394,11 @@ class ProcessAILA:
                 result += text[start_index: ]
                 
             # START:
-            if start_pattern.search(text):
+            if '犯罪事實' == text or ('犯罪事實' in text and '如下' in text):
                 is_fact = True
-            if '犯罪事實' in text and '如下' in text:
-                is_fact = True
+                
+        if result == "":
+            logging.error(f"re_fact => {fileName}")
                 
         return result 
     
@@ -483,7 +579,7 @@ class ProcessAILA:
                     
         return criminals
     
-    def re_main_text(self, content):
+    def re_main_text(self, content, fileName):
         
         # 擷取判決主文
         result_main_text = ""
@@ -496,23 +592,37 @@ class ProcessAILA:
                 continue
             
             text = re.sub(r'\s', '', line).replace(u'\u3000', u' ').replace(u'\xa0', u' ').strip()
-            print(text)
+            # print(text)
+            
             # @ 後文到了則停止
             stop_list = [
                 "理由", "事實",
-                "犯罪事實理由", "犯罪事實", "犯罪事實及證據名稱", "事實及理由", "犯罪事實及理由"
+                "犯罪事實理由", "犯罪事實", "犯罪事實及證據名稱", "事實及理由", "犯罪事實及理由",
+                "二、犯罪事實要旨：", "證據並所犯法條"
             ]
             for stop_term in stop_list:
                 if text == stop_term:
+                    # print("========= 結束")
                     is_main_text = False
+            
+            start_index = 0
+            
+            # START:
+            if '主文' in text:
+                start_index = text.index('主文') + 2
+                is_main_text = True
             
             # @ 擷取 extraction
             if is_main_text:
-                result_main_text += text
+                result_main_text += text[start_index: ]
                 
             # @ 前文找到則開始
-            if text == '主文':
+            if text == '主文' or "主文：" in text:
+                # print("=========主文")
                 is_main_text = True
+                
+        if result_main_text == "":
+            logging.error(f"main_text => {fileName}")
         
         return result_main_text
     
@@ -521,10 +631,10 @@ class ProcessAILA:
         def parse_time(time_str, line, fileName):
             # 解析時間字符串，返回年、月、日的數值
             try:
-                return int(cn2an.cn2an(chinese_to_int(time_str) if time_str != '' else 0, 'smart'))
-            except ValueError as e:
-                logging.error(f"{fileName} 錯誤發生在此行: {line}, 相關匹配: {time_str}")
-                logging.error(f"錯誤詳情: {e}")
+                result = int(cn2an.cn2an(chinese_to_int(time_str) if time_str != '' else 0, 'smart'))
+                return result
+            except (ValueError, KeyError) as e: 
+                logging.error(f"re_imprisonment => {fileName} => main_text => {line} => 錯誤匹配: {time_str}")
                 return 0
         
         imprisonments = []
@@ -532,8 +642,22 @@ class ProcessAILA:
         
         if '年' in line or '月' in line or '日' in line:
             # 合併正則表達式
-            pattern = re.compile(r'(有期徒刑|拘役)(?:(?:以)?([\u4e00-\u9fff]{1,2})年)?(?:([\u4e00-\u9fff]{1,2})月)?(?:又?([\u4e00-\u9fff]{1,2})日)?')
-            matches = pattern.findall(line)
+            pattern = re.compile(r'(有期徒刑|拘役)(?:(?:以)?([\u4e00-\u9fff\d+]{1,2})年)?(?:([\u4e00-\u9fff\d+]{1,2})月)?(?:(?:又)?([\u4e00-\u9fff\d]{1,5})日)?')
+            filter_char = {
+                '(': '', 
+                '（': '', 
+                ')': '', 
+                '）': '', 
+                '以': '', 
+                '又': '',
+                '月月': '月',
+                '萬萬': '萬',
+                '年年': '年'
+            }
+            temp_text = line
+            for char in filter_char:
+                temp_text = temp_text.replace(char, '')
+            matches = pattern.findall(temp_text)
             
             for match in matches:
                 sentence_type, years, months, days = match
@@ -568,7 +692,7 @@ class ProcessAILA:
     
     def re_amount(self, line, fileName):
         
-        pattern = re.compile(r"罰金新臺幣([\u4e00-\u9fff]+)元")
+        pattern = re.compile(r"(?<!易科)(?:罰金(?:新(?:臺|台)幣)?)([\u4e00-\u9fff]+)元(?<!折算壹日)[，。、？]")
         matches = pattern.findall(line)  # 使用 findall 來找到所有匹配
         
         amount_list = []
@@ -577,8 +701,7 @@ class ProcessAILA:
                 regular_match = cn2an.cn2an(chinese_to_int(match), 'smart')
                 amount_list.append(regular_match)  
             except Exception as e:
-                logging.error(f"{fileName} 錯誤發生在此行: {line}, 相關匹配: {match}")
-                logging.error(f"錯誤詳情: {e}")
+                logging.error(f"re_amount => {fileName} => main_text => {line} => 錯誤匹配: {match}")
 
         return amount_list, sum(amount_list)
     
@@ -592,16 +715,15 @@ class ProcessAILA:
         result = -1
         if '無罪' in line:
             result = 0
-        if '免刑' in line:
+        if  '免刑' in line or '免訴' in line or '駁回' in line :
             result = 2
         if '不受理' in line:
             result = 3
         if amount_count != 0 or imprisonment_count != 0:
             result = 1
             
-        if result == -1:
-            logging.error(f"re_reason {fileName} 擷取失敗 {line}")
-            logging.error(f"    amount_count: {amount_count}, imprisonment_count: {imprisonment_count}")
+        if result == -1 and line != '':
+            logging.error(f"re_reason => {fileName} => main_text => {line}")
             
         return result
     
@@ -634,6 +756,16 @@ class ProcessAILA:
         
     
     # ---------------------------------------------------------------------------------------------------- 其他程式碼
+    
+    def load_data(self, file_path="/TWLJP/all_data.json"):
+        
+        # 獲取檔案 all_data 拆檔案
+        all_data = []
+        with open(self.save_path + file_path, 'r', encoding="utf-8") as file:
+            for line in file:
+                all_data.append(json.loads(line))
+                
+        return all_data
     
     # -v- 儲存個別結果
     def save_results(self, case_reason_count, file_type, accumulated_total):
@@ -707,9 +839,6 @@ class ProcessAILA:
                 with open(file_path, 'w', encoding='utf-8') as writeFile:
                     pass 
                 
-            
-        
-                
     # -v- 初始化 logging
     def initialize_logging(self, save_path):
         log_file_path = f'{save_path}log/ProcessAILA.log'
@@ -727,6 +856,9 @@ class ProcessAILA:
         accumulated_criminals_dict = defaultdict(int)
         accumulated_penalty_dict = defaultdict(int)
         accumulated_reason_dict = defaultdict(int)
+        accumulated_combine_charge_article_dict = defaultdict(int)
+        
+        accumulated_error_dict  = defaultdict(int)
         
         # - 數量
         accumulated_total_charges = 0
@@ -734,13 +866,18 @@ class ProcessAILA:
         accumulated_total_mult_criminals = 0
         accumulated_total_penalty = 0
         accumulated_total_reason = 0
+        accumulated_total_combine_charge_article = 0
+        
+        accumulated_total_error = 0
 
         return (
-            accumulated_charge_dict, accumulated_article_dict, accumulated_criminals_dict, 
-            accumulated_penalty_dict, accumulated_reason_dict,
+            accumulated_charge_dict, accumulated_article_dict, accumulated_combine_charge_article_dict,
+            accumulated_criminals_dict, accumulated_penalty_dict, accumulated_reason_dict,
+            accumulated_error_dict,
             
-            accumulated_total_charges, accumulated_total_article, accumulated_total_mult_criminals,
-            accumulated_total_penalty, accumulated_total_reason
+            accumulated_total_charges, accumulated_total_article, accumulated_total_combine_charge_article,
+            accumulated_total_mult_criminals, accumulated_total_penalty, accumulated_total_reason,
+            accumulated_total_error
         )
         
 
@@ -774,8 +911,8 @@ class REASON(Enum):
 class PENALTY(Enum):
     
     無 = 0
-    刑期 = 1
-    罰金 = 2
+    只有刑期 = 1
+    只有罰金 = 2
     刑期與罰金 = 3
         
 class TaiwanTimeFormatter(logging.Formatter):
