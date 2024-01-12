@@ -128,9 +128,11 @@ class ProcessAILA:
                 fact = self.re_fact(content_split[0], fileName)
                 main_text = self.re_main_text(content_split[1], fileName)
                 
+                # @ article, charge, criminals, accusation
                 relevant_articles_org, article_list, total_article,  = self.re_article(content_split[0]) 
                 relevant_articles_org_judge, article_list_judge, total_article_judge,  = self.re_article(content_split[1]) 
                 criminals_list = self.re_criminals(content_split[0])
+                total_criminals = len(criminals_list)
                 indictment_accusation = self.re_charges(content_split[0]) 
                 judgment_accusation = self.re_charges(content_split[1], r'裁判案由：(.+)')
                 
@@ -151,39 +153,39 @@ class ProcessAILA:
                     "main_text": main_text,   # 判決主文
                     "meta": {
                         
-                        "#_relevant_articles": total_article,               # article 的數量
-                        "relevant_articles": article_list,                  # law, article
-                        "relevant_articles_org": relevant_articles_org,     # law + article
+                        "#_relevant_articles": total_article,               # article 的數量 (default = 0)
+                        "relevant_articles": article_list,                  # articles (default = [])
+                        "relevant_articles_org": relevant_articles_org,     # Law + Article (default = [])
                         
                         
-                        "#_relevant_articles_judge": total_article_judge,               # article 的數量 下半部(裁判)
-                        "relevant_articles_judge": article_list_judge,                  # law, article 下半部(裁判)
-                        "relevant_articles_org_judge": relevant_articles_org_judge,     # law + article 下半部(裁判)
+                        "#_relevant_articles_judge": total_article_judge,               # article(主文) 的數量 (default = 0)
+                        "relevant_articles_judge": article_list_judge,                  # articles(主文) (default = [])
+                        "relevant_articles_org_judge": relevant_articles_org_judge,     # Law + Article(主文) (default = [])
                         
-                        "#_criminals": len(criminals_list),                 # 犯罪者的數量
-                        "criminals": criminals_list,                        # 犯罪者們
+                        "#_criminals": total_criminals,     # 犯罪者的數量 (default = 0)
+                        "criminals": criminals_list,        # 犯罪者們 (default = [])
                         
-                        "indictment_accusation": indictment_accusation, # 起訴書案由
-                        "judgment_accusation": judgment_accusation,     # 裁判書案由
+                        "indictment_accusation": indictment_accusation, # 起訴書案由 (default = "")
+                        "judgment_accusation": judgment_accusation,     # 裁判書案由 (default = "")
                         
                         "term_of_imprisonment": {
                             
-                            "death_penalty": death_penalty,              # 死刑
-                            "life_imprisonments": life_imprisonments,  # 無期徒刑 
+                            "death_penalty": death_penalty,             # 死刑 (default = False)
+                            "life_imprisonments": life_imprisonments,   # 無期徒刑 (default = False)
                             
-                            "#_imprisonments": imprisonment_count,      # 刑期 數量  
-                            "imprisonments": imprisonment_list,             # 刑期 List 
-                            "total_imprisonment_month": total_imprisonment, # 總共刑期時間 
+                            "#_imprisonments": imprisonment_count,          # 刑期 數量 (default = 0)
+                            "imprisonments": imprisonment_list,             # 刑期s (default = [])
+                            "total_imprisonment_month": total_imprisonment, # 總共刑期時間(月) (default = 0)
                             
-                            "#_amounts": amount_count,       # 罰金數量
-                            "amounts" : amount_list,                # 罰金 List
-                            "total_amount": total_amount,           # 罰金總額
+                            "#_amounts": amount_count,      # 罰金 數量 (default = 0)
+                            "amounts" : amount_list,        # 罰金s (default = [])
+                            "total_amount": total_amount,   # 罰金總額 總共刑期時間 (default = 0)
                         }
                     },
                     
-                    "reason": reason,       # 有罪、無罪、免刑、不受理
-                    "penalty": penalty,      # 刑期(#2)、罰金(#3)、無
-                    "punishment": self.punishment(reason),     # 是(有罪)、否(無罪、免刑、不受理)
+                    "reason": reason,   # (0) 無罪  (1) 有罪 (2) 免刑 (3) 不受理
+                    "penalty": penalty, # (0) 無 (1) 只有刑期 (2) 只有罰金 (3) 刑期＋罰金
+                    "punishment": self.punishment(reason),     # True(有罪)、False(無罪、免刑、不受理)
                     
                     "ori_indictment_content": content_split[0],
                     "ori_judgment_content": content_split[1]
