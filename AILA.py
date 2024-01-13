@@ -14,7 +14,7 @@ count_arg = args["count"] if "count" in args and args["count"] is not None else 
 
 from tools.processAILA import ProcessAILA
 processData = ProcessAILA(
-    source_path='./data/data_org/',
+    source_path='./data/data_test/',
     save_path='./data/processed/',
     mode=mode_arg,
     limit_counts=count_arg,
@@ -28,16 +28,16 @@ processData = ProcessAILA(
 processData.TWLJP_JSON()
 
 # 篩選資料
-processData.filter_TWLJP()
+# processData.filter_TWLJP()
 
 # 計算處理後資訊
-# processData.counting_status()
+processData.counting_status()
 
-# 刪掉多犯罪者
-processData.remove_multiple_criminals()
+# # 刪掉多犯罪者
+# processData.remove_multiple_criminals()
 
-# 隨機抽樣, 預設為 10
-processData.random_samples(file_path="/TWLJP/sigleCriminal_allData.json", random_size=10)
+# # 隨機抽樣, 預設為 10
+# processData.random_samples(file_path="/TWLJP/sigleCriminal_allData.json", random_size=10)
 
-# 分割 train test validation
-processData.train_test_split(file_path="/TWLJP/sigleCriminal_allData.json")
+# # 分割 train test validation
+# processData.train_test_split(file_path="/TWLJP/sigleCriminal_allData.json")

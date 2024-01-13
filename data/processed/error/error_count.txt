@@ -1,0 +1,5 @@
+reason, 173
+main_text, 10
+fact, 7
+judgment_accusation, 3
+TOTAL, 

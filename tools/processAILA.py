@@ -228,7 +228,9 @@ class ProcessAILA:
     def filter_TWLJP(self):
         
         all_data = self.load_data()
-        print(len(all_data))
+        # for data in all_data:
+            
+        
     
     
     def counting_status(self):
@@ -277,7 +279,7 @@ class ProcessAILA:
         
             # @ article + charge
             for article in data['meta']['relevant_articles_org']:
-                combined_key = f"{article}-{data['meta']['indictment_accusation']}"
+                combined_key = f"{article}, {data['meta']['indictment_accusation']}"
                 accumulated_combine_charge_article_dict[combined_key] += 1
                 accumulated_total_combine_charge_article += 1
             self.save_results(accumulated_combine_charge_article_dict, 'charge_article', accumulated_total_combine_charge_article)
@@ -367,10 +369,6 @@ class ProcessAILA:
         is_fact = False # 是否是擷取位置
         result = ""     # 結果
         
-        # 使用RE 「犯罪事實」及其變體
-        start_pattern = re.compile(r'^\s*(犯\s*罪\s*事\s*實)\s*$')
-        end_pattern = re.compile(r'(證\s*據|所\s*犯\s*法\s*條|證\s*據\s*並\s*所\s*犯\s*法\s*條)')
-        
         for line in content:
             
             # @ 處理資料，若只是空白則跳過
@@ -387,6 +385,7 @@ class ProcessAILA:
             for stop_term in stop_list:
                 if text == stop_term:
                     is_fact = False
+                    return result
             
             # START:
             if '犯罪事實：' in text:
@@ -501,28 +500,28 @@ class ProcessAILA:
             for law in law_list:
                 if law in part:
                     current_prefix = law
-                    article_number = re.search(r'第(\d+)條', part)
+                    article_number = re.search(r'第(\d+條之\d+|\d+條)', part)
                     if article_number:
-                        # matches.append(f'{current_prefix}第{article_number.group(1)}條')
-                        converted_text = convert_fullwidth_to_halfwidth(article_number.group(1))
-                        matches.append([f'{current_prefix}', f'第{converted_text}條'])
+                        converted_text = convert_fullwidth_to_halfwidth(article_number.group(0))
+                        matches.append([f'{current_prefix}', f'{converted_text}'])
                     break  
                 
             else:  
                 if current_prefix:
-                    article_number = re.search(r'第(\d+)條', part)
+                    article_number = re.search(r'第(\d+條之\d+|\d+條)', part)
                     if article_number:
                         # matches.append(f'{current_prefix}第{article_number.group(1)}條')
-                        converted_text = convert_fullwidth_to_halfwidth(article_number.group(1))
-                        matches.append([f'{current_prefix}', f'第{converted_text}條'])
+                        converted_text = convert_fullwidth_to_halfwidth(article_number.group(0))
+                        matches.append([f'{current_prefix}', f'{converted_text}'])
                         
 
         return matches
     
-    def re_charges(self, content, pattern=r'裁判案由：(.+)'):
+    def re_charges(self, content, pattern=r'案由：(.+)'):
         
         for line in content:
-            match = re.search(pattern, line, re.MULTILINE)
+            text = re.sub(r'\s', '', line).replace(u'\u3000', u' ').replace(u'\xa0', u' ').strip()
+            match = re.search(pattern, text, re.MULTILINE)
             if match:
                 return match.group(1).strip()
         return ""
@@ -628,7 +627,7 @@ class ProcessAILA:
         
         if '年' in line or '月' in line or '日' in line:
             # 合併正則表達式
-            pattern = re.compile(r'(有期徒刑|拘役)(?:(?:以)?([\u4e00-\u9fff\d+]{1,2})年)?(?:([\u4e00-\u9fff\d+]{1,2})月)?(?:(?:又)?([\u4e00-\u9fff\d]{1,5})日)?')
+            pattern = re.compile(r'(有期徒刑|拘役)(?:([\u4e00-\u9fff\d+]{1,2})年)?(?:([\u4e00-\u9fff\d+]{1,2})月)?(?:([\u4e00-\u9fff\d+]{1,5})日)?')
             filter_char = {
                 '(': '', 
                 '（': '', 
@@ -638,7 +637,7 @@ class ProcessAILA:
                 '又': '',
                 '月月': '月',
                 '萬萬': '萬',
-                '年年': '年'
+                '年年': '年',
             }
             temp_text = line
             for char in filter_char:
@@ -925,6 +924,7 @@ class REASON(Enum):
     有罪 = 1
     免刑 = 2
     不受理 = 3
+    裁定判決 = 4
     
 class PENALTY(Enum):
     

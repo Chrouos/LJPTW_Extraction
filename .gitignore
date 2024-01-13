@@ -2,3 +2,6 @@ data/data_org
 data/data_test
 all_data.json
 
+*.log
+
+TWLJP/
