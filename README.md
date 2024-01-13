@@ -1,11 +1,13 @@
-改變權限
++ Step 1.
+    + `git clone git@github.com:Chrouos/LJPTW_Extraction.git`
++ Step 2.
+    + Deal with Permission: `chmod +x ./download.sh`
+    + Execute: `./download.sh` or Download the Source File [GOOGLE DRIVE](https://drive.google.com/file/d/1-sBPlmdmkzimdhCu7Aa8Ug1EluNwRBHT/view?usp=drive_link)
++ Step 3.
+    + Execute `python AILA.py`
 
-```
-chown -R 1000 {file_path}
-```
 
-# processAILA
-
+# 說明 AILA
 執行:
 + mode (觸發模式)
     + `0` or `default` (所有檔案)
@@ -13,12 +15,11 @@ chown -R 1000 {file_path}
     + `2` or `doing` (開發者模式，單獨選擇一項檔案測試)
 + limit_count (限制筆數)
     + 注意，每次資料都會隨機生成 
-
 ```shell
 python organise_data.py -m {mode} -c {limit_count} 
 
 # Example:
-# 所有檔案，100 筆資料
+# m=所有檔案模式, c=只取 100 筆
 # python organise_data.py -m 0 -c 100
 
 ```
@@ -26,24 +27,34 @@ python organise_data.py -m {mode} -c {limit_count}
 ```py
 from tools.processAILA import ProcessAILA
 processData = ProcessAILA(
-    source_path='./data/aila_data_org/',
-    save_path='./data/aila_data_process/',
+    source_path='./data/data_org/',
+    save_path='./data/processed/',
     mode=mode_arg,
     limit_counts=count_arg,
-    isRandomData=False # 檔案是否要隨機
+    isRandomData=False
 )
+
+# 計算初始總筆數
+# processData.countLength_source()
 
 # 負責處理擷取資訊，以及將資訊儲存到 log
 processData.TWLJP_JSON()
+
+# 篩選資料
+processData.filter_TWLJP()
+
+# 計算處理後資訊
+# processData.counting_status()
 
 # 刪掉多犯罪者
 processData.remove_multiple_criminals()
 
 # 隨機抽樣, 預設為 10
-processData.random_samples(file_path="/TWLJP/sigleCriminal_allData.json")
+processData.random_samples(file_path="/TWLJP/sigleCriminal_allData.json", random_size=10)
 
 # 分割 train test validation
 processData.train_test_split(file_path="/TWLJP/sigleCriminal_allData.json")
+
 ```
 
 資料夾格式

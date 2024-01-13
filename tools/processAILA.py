@@ -133,8 +133,10 @@ class ProcessAILA:
                 relevant_articles_org_judge, article_list_judge, total_article_judge,  = self.re_article(content_split[1]) 
                 criminals_list = self.re_criminals(content_split[0])
                 total_criminals = len(criminals_list)
+                
                 indictment_accusation = self.re_charges(content_split[0]) 
                 judgment_accusation = self.re_charges(content_split[1], r'裁判案由：(.+)')
+                
                 
                 imprisonment_list, total_imprisonment = self.re_imprisonment(main_text, fileName)
                 amount_list, total_amount = self.re_amount(main_text, fileName)   
@@ -143,8 +145,11 @@ class ProcessAILA:
                 death_penalty = self.death_penalty(main_text)
                 life_imprisonments = self.re_life_imprisonment(main_text)
                 
-                reason = self.re_reason(main_text, amount_count, imprisonment_count, fileName)
+                judgment_number = self.re_charges(content_split[1], r'裁判字號：(.+)')
+                reason = self.re_reason(main_text, amount_count, imprisonment_count, fileName, judgment_number)
                 penalty = self.re_penalty(amount_count, imprisonment_count)
+                
+                
                 
                 # @ 存擋格式
                 content_dict = {
@@ -220,10 +225,10 @@ class ProcessAILA:
                 
         logging.info(f"刪除多個犯罪者: {len(all_data)} -> {len(single_data)} (-{len(all_data) - len(single_data)})")
         
-    # def filter_TWLJP(self):
+    def filter_TWLJP(self):
         
-    #     with open(f"{self.save_path}charges/charges_count.txt", 'r', encoding='utf-8') as file:
-    #         return {line.split(',')[0].strip() for line in file}
+        all_data = self.load_data()
+        print(len(all_data))
     
     
     def counting_status(self):
@@ -514,35 +519,13 @@ class ProcessAILA:
 
         return matches
     
-    def re_charges(self, content, pattern=r'案　　由：(.+)'):
-        
-        content_charge = ""
-        is_done = False
+    def re_charges(self, content, pattern=r'裁判案由：(.+)'):
         
         for line in content:
-            content_charge, is_done = self.process_charges_file(content_charge, line, pattern)
-            
-            if is_done:
-                break
-            
-        return content_charge
-                
-    def process_charges_file(self, content_charge, line, pattern):
-        
-        '''
-            charges 預設位置：
-                「案　　由：{charges}」
-        '''
-        
-        is_done = False
-        match = re.search(pattern, line)
-        if match:
-            case_reason = match.group(1).strip()
-            content_charge = case_reason
-            
-            is_done = True
-            
-        return content_charge, is_done
+            match = re.search(pattern, line, re.MULTILINE)
+            if match:
+                return match.group(1).strip()
+        return ""
                 
     def re_criminals(self, content):
         
@@ -606,6 +589,7 @@ class ProcessAILA:
                 if text == stop_term:
                     # print("========= 結束")
                     is_main_text = False
+                    return result_main_text
             
             start_index = 0
             
@@ -707,22 +691,28 @@ class ProcessAILA:
 
         return amount_list, sum(amount_list)
     
-    def re_reason(self, line, amount_count, imprisonment_count, fileName):
+    def re_reason(self, line, amount_count, imprisonment_count, fileName, judgment_number):
         """
             (0) 無罪
             (1) 有罪
             (2) 免刑
             (3) 不受理
+            (4) 裁定判決
+            
+            (-1) 管轄錯誤、駁回、延長羈押、補正資料
         """
         result = -1
+    
+        if amount_count != 0 or imprisonment_count != 0:
+            result = 1
         if '無罪' in line:
             result = 0
-        if  '免刑' in line or '免訴' in line or '駁回' in line :
+        if  '免刑' in line or '免訴' in line :
             result = 2
         if '不受理' in line:
             result = 3
-        if amount_count != 0 or imprisonment_count != 0:
-            result = 1
+        if  '裁定' in judgment_number:
+            result = 4
             
         if result == -1 and line != '':
             logging.error(f"re_reason => {fileName} => main_text => {line}")
@@ -842,12 +832,38 @@ class ProcessAILA:
                     pass 
                 
     # -v- 初始化 logging
+    # def initialize_logging(self, save_path):
+    #     log_file_path = f'{save_path}log/ProcessAILA.log'
+    #     logging.basicConfig(filename=log_file_path, level=logging.INFO,
+    #                         format='%(asctime)s:%(levelname)s:%(message)s')
+    #     logging.Formatter = TaiwanTimeFormatter
+    #     logging.info(f"-------------------------------------------------------------")
+    
+    def append_to_all_log(self, current_log_path, all_log_path):
+        with open(current_log_path, 'r') as current_log, open(all_log_path, 'a') as all_log:
+            all_log.write(current_log.read())
+
+    def clear_file(self, file_path):
+        with open(file_path, 'w'):
+            pass
+        
     def initialize_logging(self, save_path):
-        log_file_path = f'{save_path}log/ProcessAILA.log'
-        logging.basicConfig(filename=log_file_path, level=logging.INFO,
-                            format='%(asctime)s:%(levelname)s:%(message)s')
+        all_log_file_path = f'{save_path}log/ALL_ProcessAILA.log'
+        current_log_file_path = f'{save_path}log/ProcessAILA.log'
+
+        # 如果 ProcessAILA.log 存在，將其內容附加到 ALL_ProcessAILA.log
+        if path.exists(current_log_file_path):
+            self.append_to_all_log(current_log_file_path, all_log_file_path)
+            self.clear_file(current_log_file_path)
+
+        # 設置通用的日誌格式
+        log_format = '%(asctime)s:%(levelname)s:%(message)s'
+
+        # 設置 ProcessAILA.log 的 logger
+        logging.basicConfig(filename=current_log_file_path, level=logging.INFO, format=log_format)
         logging.Formatter = TaiwanTimeFormatter
-        logging.info(f"-------------------------------------------------------------")
+        logging.info("-------------------------------------------------------------")
+
     
     # -v- 新增的 initialize_accumulators 方法
     def initialize_accumulators(self):
