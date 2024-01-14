@@ -212,7 +212,7 @@ class ProcessAILA:
         
     def remove_multiple_criminals(self):
         
-        all_data = self.load_data('/TWLJP/all_data.json')
+        all_data = self.load_data()
         single_data = []
         for data in all_data:
             if data['meta']['#_criminals'] == 1 or data['meta']['#_criminals'] == 0 :
@@ -225,15 +225,15 @@ class ProcessAILA:
                 
         logging.info(f"刪除多個犯罪者: {len(all_data)} -> {len(single_data)} (-{len(all_data) - len(single_data)})")
         
-    def filter_TWLJP(self):
+    def filter_TWLJP(self, file_name="all_data.json"):
         
-        all_data = self.load_data()
+        all_data = self.load_data(file_name)
         # for data in all_data:
             
         
     
     
-    def counting_status(self):
+    def counting_status(self, file_name="all_data.json"):
         (
             accumulated_charge_dict, accumulated_article_dict, accumulated_combine_charge_article_dict,
             accumulated_criminals_dict, accumulated_penalty_dict, accumulated_reason_dict,
@@ -245,7 +245,7 @@ class ProcessAILA:
             
         ) = self.initialize_accumulators()
         
-        all_data = self.load_data()
+        all_data = self.load_data(file_name)
         for data in all_data:
             
             # - 計數器
@@ -748,11 +748,11 @@ class ProcessAILA:
     
     # ---------------------------------------------------------------------------------------------------- 其他程式碼
     
-    def load_data(self, file_path="/TWLJP/all_data.json"):
+    def load_data(self, file_name="all_data.json"):
         
         # 獲取檔案 all_data 拆檔案
         all_data = []
-        with open(self.save_path + file_path, 'r', encoding="utf-8") as file:
+        with open(f"{self.save_path}/TWLJP/{file_name}", 'r', encoding="utf-8") as file:
             for line in file:
                 all_data.append(json.loads(line))
                 
