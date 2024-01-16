@@ -32,11 +32,10 @@ processData.TWLJP_JSON()
 processData.counting_status("all_data.json", save_dir="statistics/ori/")
 
 # @ 篩選資料
-processData.filter_TWLJP({"name": "article_charge", "number": 30}, "all_data.json", reference_dir="statistics/filter/")
-# => 輸出檔案為 filter_data.json
+processData.filter_TWLJP([{"name": "article", "number": 30}, {"name": "charges", "number": 30}], "all_data.json", reference_dir="statistics/filter/")# => 輸出檔案為 filter_data.json
 
 # @ 分類 TWLJP: 1, 2, 3
-processData.category_data(file_name="filter_data.json")
+processData.category_data(file_name="filter_data.json", is_filter=True)
 
 # @ 分割 train test validation
 processData.category_train_test_split()

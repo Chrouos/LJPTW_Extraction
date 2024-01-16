@@ -218,7 +218,7 @@ class ProcessAILA:
 
     # -v- 過濾資料
     def filter_TWLJP(self, 
-                        threshold = [{"name": "article", "number": 30}, {"name": "charge", "number": 30},], 
+                        threshold = [{"name": "article", "number": 30}, {"name": "charges", "number": 30},], 
                         file_name="all_data.json",
                         reference_dir='statistics/filter/'
                     ):
@@ -228,7 +228,6 @@ class ProcessAILA:
         all_data = self.data_dict[file_name.replace('.json', '')]
         
         delete_count = {
-            "未達 article_charge 標準": 0,
             "Reason 是「未抓取成功」/「裁定判決」": 0,
             "不存在main_text, fact...": 0,
             "多位犯罪者": 0,
@@ -269,81 +268,23 @@ class ProcessAILA:
         json_content = "\n".join([json.dumps(item, ensure_ascii=False) for item in filtered_data])
         self.check_and_create_directories(self.save_path, ['TWLJP'])   # = 路徑防呆
         self.save_to_file(f"{save_file_path}{file_name}", json_content)
+        self.data_dict[file_name.replace('.json', '')] = self.load_data(file_name)
         
         # - 篩第二次
-        is_redo = True
-        redo_count = 0
-        while is_redo:
-            
-            self.data_dict['filter_data'] = self.load_data('filter_data.json')
-            self.counting_status(file_name, save_dir="statistics/filter/")
-            
-            # @ 判斷是否結束(都大於閥值)
-            is_redo = False
-            for item in threshold:
-                threshold_data = self.load_status_data(item['name'], reference_dir)
-                min_value = min(threshold_data.values())
-                
-                # @ 若有小於 threshold 的值，則繼續
-                if min_value < int(item['number']):
-                    is_redo = True
-            
-            if is_redo == False: break
-            else: redo_count += 1
-            
-            # @ 篩選
-            filtered_data_final = []
-            current_filtered_data = self.data_dict['filter_data']
-            for data in tqdm(current_filtered_data, desc=f"filter_TWLJP (2/2) :{redo_count}"):
-                
-                keep_data = True  # 預設為保留數據
-                
-                # @ 檢查 threshold
-                for item in threshold:
-                    threshold_data = self.load_status_data(item['name'], reference_dir)
-                    
-                    # @ 檢查 charge
-                    if item['name'] == 'charges':
-                        if int(threshold_data[data['meta']['indictment_accusation']]) <= int(item['number']):  
-                            keep_data = False
-                            delete_count["未達 article_charge 標準"] += 1
-                            break
-                        
-                    # @ 檢查 article
-                    if item['name'] == 'article':  
-                        for article in data['meta']['relevant_articles_org']:
-                            if int(threshold_data[article]) <= int(item['number']):
-                                keep_data = False
-                                delete_count["未達 article_charge 標準"] += 1
-                                break
-                
-                    # @ 檢查 article-charge
-                    if item['name'] == 'article_charge':
-                        for article in data['meta']['relevant_articles_org']:
-                            combined_key = f"{article}-{data['meta']['indictment_accusation']}"
-                            if int(threshold_data[combined_key]) <= int(item['number']): 
-                                keep_data = False  
-                                delete_count["未達 article_charge 標準"] += 1
-                                break
-                            
-                if keep_data == True: 
-                    filtered_data_final.append(data)  # 只有符合條件的數據才被添加
-                else: filtered_counting += 1
-            
-            # - 儲存檔案
-            json_content = "\n".join([json.dumps(item, ensure_ascii=False) for item in filtered_data_final])
-            self.check_and_create_directories(self.save_path, ['TWLJP'])   # = 路徑防呆
-            self.save_to_file(f"{save_file_path}{file_name}", json_content)
-        
+        filter_dict, total_delete = self.check_filter_redo_data(file_name, threshold, reference_dir, save_dir="TWLJP/")
+
         # @ 結果
-        final_result = f"[filter_TWLJP] 從 {file_name} 中，過濾資料: {len(all_data)} -> {len(all_data) - filtered_counting}  ( 刪掉 -{filtered_counting})"
+        final_result = f"[filter_TWLJP] 從 {file_name} 中，過濾資料: {len(all_data)} -> {len(all_data) - filtered_counting - total_delete}  ( 刪掉 -{filtered_counting + total_delete})"
+        print(final_result)
         logging.info(final_result)
-        logging.info(f"\t未達 article_charge 標準: {delete_count['未達 article_charge 標準']}")
+        logging.info(f"\t根據 threshold 刪除 {total_delete}")
+        logging.info(f"\t各別刪除 {filter_dict}")
         logging.info(f"\tReason 是「未抓取成功」/「裁定判決」: {delete_count['Reason 是「未抓取成功」/「裁定判決」']}")
         logging.info(f"\t不存在main_text, fact...: {delete_count['不存在main_text, fact...']}")
         logging.info(f"\t多位犯罪者: {delete_count['多位犯罪者']}")
         logging.info(f"\t沒擷取到犯罪者資訊: {delete_count['沒擷取到犯罪者資訊']}")
         
+        # @ 儲存 counting
         filter_content = [f"{key}, {value}" for key, value in delete_count.items()]
         filter_content.append(final_result)
         save_filter_file_path = f"{self.save_path}filter_result.txt"
@@ -355,6 +296,92 @@ class ProcessAILA:
         print(f"Save file to: {save_file_path}{file_name}")
         print(f"Save file to: {save_filter_file_path}")
         
+        
+    def check_filter_redo_data(self, 
+                                    file_name="filter_data.json", 
+                                    threshold = [{"name": "article", "number": 30}, {"name": "charges", "number": 30},],
+                                    reference_dir='statistics/filter/',
+                                    save_dir = f"TWLJP/"):
+        is_redo = True
+        redo_count = 0
+        
+        # - 篩選
+        delete_count = {
+            'charges': [],
+            'article': [],
+            'article_charge': []
+        }
+        total_delete = 0
+        
+        while is_redo:
+                
+            # @ 獲得讀取資料
+            current_filtered_data = self.load_data(file_name)
+            
+            temp_file_name = file_name.replace('.json', '')
+            if temp_file_name in self.data_dict: 
+                self.data_dict[temp_file_name] = current_filtered_data
+            
+            self.counting_status(file_name, reference_dir)
+            
+            # @ 判斷是否結束(都大於閥值)
+            is_redo = False
+            for item in threshold:
+                threshold_data = self.load_status_data(item['name'], reference_dir)
+                min_value = min(threshold_data.values())
+                
+                # @ 若有小於 threshold 的值，則繼續
+                if min_value < int(item['number']):
+                    is_redo = True
+            
+            # @ 結束
+            if is_redo == False: break
+            else: redo_count += 1
+            
+            filtered_data_final = []
+            for data in tqdm(current_filtered_data, desc=f"filter_TWLJP (2/2) :{redo_count}"):
+                
+                keep_data = True  # 預設為保留數據
+                
+                # @ 檢查 threshold
+                for item in threshold:
+                    threshold_data = self.load_status_data(item['name'], reference_dir)
+                    
+                    # @ 檢查 charge
+                    if item['name'] == 'charges':
+                        
+                        if int(threshold_data[data['meta']['indictment_accusation']]) <= int(item['number']):  
+                            keep_data = False
+                            delete_count['charges'].append(data['meta']['indictment_accusation'])
+                            break
+                        
+                    # @ 檢查 article
+                    if item['name'] == 'article':  
+                        for article in data['meta']['relevant_articles_org']:
+                            if int(threshold_data[article]) <= int(item['number']):
+                                keep_data = False
+                                delete_count['article'].append(data['meta']['relevant_articles_org'])
+                                break
+                
+                    # @ 檢查 article-charge
+                    if item['name'] == 'article_charge':
+                        for article in data['meta']['relevant_articles_org']:
+                            combined_key = f"{article}-{data['meta']['indictment_accusation']}"
+                            if int(threshold_data[combined_key]) <= int(item['number']): 
+                                keep_data = False  
+                                delete_count['article_charge'].append(combined_key)
+                                break
+                            
+                if keep_data == True: 
+                    filtered_data_final.append(data)  # 只有符合條件的數據才被添加
+                else: total_delete += 1
+            
+            # - 儲存檔案
+            json_content = "\n".join([json.dumps(item, ensure_ascii=False) for item in filtered_data_final])
+            self.check_and_create_directories(self.save_path, ['TWLJP'])   # = 路徑防呆
+            self.save_to_file(f"{self.save_path}{save_dir}{file_name}", json_content)
+            
+        return delete_count, total_delete
         
     # -v- 資料內容 filter
     def counting_status(self, file_name="all_data.json", save_dir='statistics/ori/'):
@@ -499,7 +526,7 @@ class ProcessAILA:
     
     
     # -v- TWLJP => 1, 2, 3
-    def category_data(self, file_name="filter_data.json"):
+    def category_data(self, file_name="filter_data.json", is_filter=False):
         
         all_data = self.load_data(file_name)    
         
@@ -535,25 +562,53 @@ class ProcessAILA:
         file_name = "TWLJP_1.json"
         json_content = "\n".join([json.dumps(item, ensure_ascii=False) for item in task_1])
         self.save_to_file(f"{save_file_path}{file_name}", json_content)
-        self.counting_status("category/TWLJP_1.json", save_dir="statistics/TWLJP_1/")
+        # self.counting_status("category/TWLJP_1.json", save_dir="statistics/TWLJP_1/")
+        if is_filter:
+            filter_dict, total_delete = self.check_filter_redo_data(    
+                                            file_name="category/TWLJP_1.json", 
+                                            threshold = [{"name": "article", "number": 30}, {"name": "charges", "number": 30},],
+                                            reference_dir='statistics/TWLJP_1/',
+                                            save_dir = f"TWLJP/"
+                                        )
         
         # @ 存擋： TASK 2
         file_name = "TWLJP_2.json"
         json_content = "\n".join([json.dumps(item, ensure_ascii=False) for item in task_2])
         self.save_to_file(f"{save_file_path}{file_name}", json_content)
-        self.counting_status("category/TWLJP_2.json", save_dir="statistics/TWLJP_2/")
+        # self.counting_status("category/TWLJP_2.json", save_dir="statistics/TWLJP_2/")
+        if is_filter:
+            filter_dict, total_delete = self.check_filter_redo_data(    
+                                            file_name="category/TWLJP_2.json", 
+                                            threshold = [{"name": "article", "number": 30}, {"name": "charges", "number": 30},],
+                                            reference_dir='statistics/TWLJP_2/',
+                                            save_dir = f"TWLJP/"
+                                        )
+        
         
         # @ 存擋： TASK 3
         file_name = "TWLJP_3.json"
         json_content = "\n".join([json.dumps(item, ensure_ascii=False) for item in task_3])
         self.save_to_file(f"{save_file_path}{file_name}", json_content)
-        self.counting_status("category/TWLJP_3.json", save_dir="statistics/TWLJP_3/")
+        # self.counting_status("category/TWLJP_3.json", save_dir="statistics/TWLJP_3/")
+        if is_filter:
+            filter_dict, total_delete =  self.check_filter_redo_data(    file_name="category/TWLJP_3.json", 
+                                            threshold = [{"name": "article", "number": 30}, {"name": "charges", "number": 30},],
+                                            reference_dir='statistics/TWLJP_3/',
+                                            save_dir = f"TWLJP/"
+                                        )
         
         # @ 存擋： TASK 4
         file_name = "TWLJP_4.json"
         json_content = "\n".join([json.dumps(item, ensure_ascii=False) for item in task_4])
         self.save_to_file(f"{save_file_path}{file_name}", json_content)
-        self.counting_status("category/TWLJP_4.json", save_dir="statistics/TWLJP_4/")
+        # self.counting_status("category/TWLJP_4.json", save_dir="statistics/TWLJP_4/")
+        if is_filter:
+            filter_dict, total_delete = self.check_filter_redo_data(    
+                                            file_name="category/TWLJP_4.json", 
+                                            threshold = [{"name": "article", "number": 30}, {"name": "charges", "number": 30},],
+                                            reference_dir='statistics/TWLJP_4/',
+                                            save_dir = f"TWLJP/"
+                                        )
         
         
         # - 總結計算
