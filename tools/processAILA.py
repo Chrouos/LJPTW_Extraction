@@ -510,7 +510,7 @@ class ProcessAILA:
             makedirs(folder_path)
             
         # 初始化計數
-        counts = {'train': 0, 'test': 0, 'validation': 0}
+        counts = {'train': 0, 'test': 0, 'validation': 0, 'total': len(all_data)}
             
         for data, suffix in zip([train_data, test_data, validation_data], ['train', 'test', 'validation']):
             with open(f'{folder_path}{suffix}.json', 'w', encoding='utf-8') as file:

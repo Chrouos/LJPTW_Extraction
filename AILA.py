@@ -24,23 +24,20 @@ processData = ProcessAILA(
 # @ 計算初始總筆數
 processData.countLength_source()
 
-# @ 負責處理擷取資訊，以及將資訊儲存到 log
+# @ 負責處理擷取資訊，以及將資訊儲存到 log # => 輸出檔案為 all_data.json
 processData.TWLJP_JSON()
-# => 輸出檔案為 all_data.json
 
 # @ 計算處理前資訊
 processData.counting_status("all_data.json", save_dir="statistics/ori/")
 
-# @ 篩選資料
-processData.filter_TWLJP([{"name": "article", "number": 30}, {"name": "charges", "number": 30}], "all_data.json", reference_dir="statistics/filter/")# => 輸出檔案為 filter_data.json
+# @ 篩選資料 # => 輸出檔案為 filter_data.json
+processData.filter_TWLJP([{"name": "article", "number": 30}, {"name": "charges", "number": 30}], "all_data.json", reference_dir="statistics/filter/")
 
 # @ 分類 TWLJP: 1, 2, 3
 processData.category_data(file_name="filter_data.json", is_filter=True)
 
-# @ 分割 train test validation
+# @ 分割 train test validation # => 輸出檔案為 TWLJP: 1, 2, 3, 4
 processData.category_train_test_split()
-# => 輸出檔案為 TWLJP: 1, 2, 3, 4
-
 
 # @ 隨機抽樣, 預設為 10
 # processData.random_samples(file_name="filter_data.json", random_size=10)
