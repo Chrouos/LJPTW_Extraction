@@ -64,37 +64,6 @@ processData.category_train_test_split()
 # => 輸出檔案為 TWLJP: 1, 2, 3, 4
 ```
 
-資料夾格式: processed
-```
-├── TWLJP # 存擋結構
-│   ├── category # 任務分類目標
-│   └── formal   # 正式訓練資料
-│       ├── TWLJP_1
-│       ├── TWLJP_2
-│       ├── TWLJP_3
-│       └── TWLJP_4
-├── filter # 過濾後的資料統計
-│   ├── article
-│   ├── article_charge
-│   ├── charges
-│   ├── criminals
-│   ├── error
-│   ├── law
-│   ├── penalty
-│   └── reason
-├── log # 操作 log
-└── ori # 原始資料的資料統計
-    ├── article
-    ├── article_charge
-    ├── charges
-    ├── criminals
-    ├── error
-    ├── law
-    ├── penalty
-    └── reason
-
-```
-
 TWLJP_JSON 格式:
 ```
 content_dict = {
@@ -142,8 +111,51 @@ content_dict = {
 }
 ```
 
-### TWLJP
+### Filter
+處理的 function: `filter_TWLJP`
++ article-charge: 統計資料 < 30 筆以下，移除
++ reason: "裁定判決"或"未抓取成功"，移除
++ main_text, fact, charge: 為空，移除 
++ criminals: 多位犯罪者，移除
+
+### TWLJP 
+處理的 function: `category_data`
 + TASK_1: (有罪)
 + TASK_2: (刑期：只留下有刑期的部分，有罰金就不要)
 + TASK_3: (罰金：只留下有罰金的部分，有刑期就不要)
 + TASK_4: (罰金 + 刑期)
+
+
+### 輸出格式: processed
+```
+├── TWLJP # 處理後的資料存擋
+│   ├── all_data.json # 分類後的所有檔案
+│   ├── category # 任務分類目標
+│   │   ├── TWLJP_1.json
+│   │   ├── TWLJP_2.json
+│   │   ├── TWLJP_3.json
+│   │   └── TWLJP_4.json
+│   ├── filter_data.json
+│   ├── formal  # 正式訓練資料
+│   │   └── TWLJP_1, TWLJP_2, TWLJP_3, TWLJP_4
+│   │       ├── count.txt # 統計 test, train, validation 筆數
+│   │       ├── test.json
+│   │       ├── train.json
+│   │       └── validation.json
+│   └── random.json # 隨機從某 file 抽取筆數
+├── countLength_category.txt
+├── countLength_source.txt
+├── filter
+│   └── article, article_charge, charges, criminals, error, law, penalty, reason
+│       ├── {key}.txt           # 未包含數字的數據，純Key
+│       └── {key}_count.txt     # 統計數據數量
+├── filter_result.txt
+├── log # 處理 log
+│   ├── ALL_ProcessAILA.log # 過去的所有 log 紀錄
+│   └── ProcessAILA.log     # 最後一次的 log 紀錄
+└── ori # 原始資料的資料統計
+│   └── article, article_charge, charges, criminals, error, law, penalty, reason
+│       ├── {key}.txt           # 未包含數字的數據，純Key
+│       └── {key}_count.txt     # 統計數據數量
+
+```
