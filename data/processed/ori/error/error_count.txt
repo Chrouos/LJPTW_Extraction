@@ -1,5 +1,0 @@
-reason, 713
-main_text, 569
-judgment_accusation, 17
-fact, 2
-TOTAL, 
