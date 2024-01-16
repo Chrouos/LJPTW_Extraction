@@ -38,30 +38,24 @@ processData = ProcessAILA(
 # @ 計算初始總筆數
 processData.countLength_source()
 
-# @ 負責處理擷取資訊，以及將資訊儲存到 log
+# @ 負責處理擷取資訊，以及將資訊儲存到 log # => 輸出檔案為 all_data.json
 processData.TWLJP_JSON()
-# => 輸出檔案為 all_data.json
 
-# @ 計算處理後資訊
-processData.counting_status("all_data.json", save_dir="ori/")
+# @ 計算處理前資訊
+processData.counting_status("all_data.json", save_dir="statistics/ori/")
 
-# @ 篩選資料
-processData.filter_TWLJP({"name": "article_charge", "number": 30}, "all_data.json", reference_dir="ori/")
-# => 輸出檔案為 filter_data.json
-
-# @ 計算處理後資訊
-processData.counting_status("filter_data.json", save_dir="filter/")
-
-# @ 隨機抽樣, 預設為 10
-processData.random_samples(file_name="filter_data.json", random_size=10)
-# => 輸出檔案為 random.json
+# @ 篩選資料 # => 輸出檔案為 filter_data.json
+processData.filter_TWLJP([{"name": "article", "number": 30}, {"name": "charges", "number": 30}], "all_data.json", reference_dir="statistics/filter/")
 
 # @ 分類 TWLJP: 1, 2, 3
-processData.category_data(file_name="filter_data.json")
+processData.category_data(file_name="filter_data.json", is_filter=True)
 
-# @ 分割 train test validation
+# @ 分割 train test validation # => 輸出檔案為 TWLJP: 1, 2, 3, 4
 processData.category_train_test_split()
-# => 輸出檔案為 TWLJP: 1, 2, 3, 4
+
+# @ 隨機抽樣, 預設為 10
+# processData.random_samples(file_name="filter_data.json", random_size=10)
+# => 輸出檔案為 random.json
 ```
 
 TWLJP_JSON 格式:
@@ -113,7 +107,7 @@ content_dict = {
 
 ### Filter
 處理的 function: `filter_TWLJP`
-+ article-charge: 統計資料 < 30 筆以下，移除
++ article/charge: 統計資料 < 30 筆以下，移除
 + reason: "裁定判決"或"未抓取成功"，移除
 + main_text, fact, charge: 為空，移除 
 + criminals: 多位犯罪者，移除
