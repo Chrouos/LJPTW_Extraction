@@ -1,6 +1,5 @@
-reason, 7806
-main_text, 5634
-judgment_accusation, 106
-fact, 77
-indictment_accusation, 3
+reason, 713
+main_text, 569
+judgment_accusation, 17
+fact, 2
 TOTAL, 

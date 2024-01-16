@@ -2,4 +2,3 @@ reason
 main_text
 judgment_accusation
 fact
-indictment_accusation

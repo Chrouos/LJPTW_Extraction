@@ -230,13 +230,13 @@ class ProcessAILA:
             keep_data = True  # 預設為保留數據
             
             # @ 檢查 article-charge
-            for article in data['meta']['relevant_articles_org']:
-                if threshold['name'] == 'article_charge':
+            if threshold['name'] == 'article_charge':
+                for article in data['meta']['relevant_articles_org']:
                     combined_key = f"{article}-{data['meta']['indictment_accusation']}"
                     if int(threshold_data[combined_key]) <= int(threshold['number']): # 如果不符合條件，標記為不保留
                         keep_data = False  
                         delete_count["未達 article_charge 標準"] += 1
-                    
+                
             # @ 檢查 reason
             if data['reason'] == 4 or data['reason'] == -1:
                 keep_data = False
@@ -415,7 +415,7 @@ class ProcessAILA:
     
     
     # -v- TWLJP => 1, 2, 3
-    def category_data(self, file_name="/filter_data.json"):
+    def category_data(self, file_name="filter_data.json"):
         
         all_data = self.load_data(file_name)    
         
