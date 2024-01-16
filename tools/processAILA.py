@@ -12,7 +12,7 @@ import time
 from collections import defaultdict, Counter
 from datetime import datetime
 from enum import Enum
-from os import listdir, mkdir, path, remove
+from os import listdir, makedirs, path, remove, makedirs
 from os.path import isdir, join
 
 import pandas as pd
@@ -44,6 +44,7 @@ class ProcessAILA:
         self.check_and_create_directories(self.save_path)   # = 路徑防呆
         self.initialize_logging(self.save_path) # = 初始化 logging
         
+        
         # - 獲得所有 source 資料夾與之子之資料名稱
         source_folders = listdir(self.source_path)
         mode = Mode.from_string(mode)
@@ -64,7 +65,7 @@ class ProcessAILA:
         for folder in self.source_folderList:
             files = listdir(self.source_path + folder)
             self.source_fileList[folder] = sorted(file for file in files if file != '.DS_Store')
-                
+            
     # -v- 計算總共數量
     def countLength_source(self):
         
@@ -78,7 +79,6 @@ class ProcessAILA:
             writeContent.append(f"{folder_name}, {len(temp_fileList_indictment)}")
             
         # @ 輸出最後數量
-        print(f"countLength_souce 總共 {total_count}" )
         writeContent.append(f"總共 {total_count}")
 
         # @ 儲存檔案
@@ -91,7 +91,6 @@ class ProcessAILA:
         
         writeContent = []
         
-        self.check_and_create_files(['charges', 'article', 'criminals', 'penalty', 'reason', 'error', 'charge_article'])
         
         # @ 計算時間
         folders_counts = len(self.source_folderList)
@@ -196,8 +195,6 @@ class ProcessAILA:
                     "ori_judgment_content": content_split[1]
                 }
                 
-                
-            
                 # @ 存入 JSON
                 writeContent.append(content_dict)
             
@@ -209,80 +206,144 @@ class ProcessAILA:
         self.save_to_file(f"{save_file_path}{file_name}", json_content)
                 
 
+    # -v- 過濾資料
+    def filter_TWLJP(self, 
+                        threshold = {"name": "article_charge", "number": 30}, 
+                        file_name="all_data.json",
+                        reference_dir='ori/'
+                    ):
         
-    def remove_multiple_criminals(self):
-        
-        all_data = self.load_data()
-        single_data = []
-        for data in all_data:
-            if data['meta']['#_criminals'] == 1 or data['meta']['#_criminals'] == 0 :
-                single_data.append(data)
-        
-        with open(f'{self.save_path}TWLJP/sigleCriminal_allData.json', 'w', encoding='utf-8') as file:
-            for item in single_data:
-                file.write(json.dumps(item, ensure_ascii=False))
-                file.write('\n')
-                
-        logging.info(f"刪除多個犯罪者: {len(all_data)} -> {len(single_data)} (-{len(all_data) - len(single_data)})")
-        
-    def filter_TWLJP(self, file_name="all_data.json"):
-        
+        filtered_data = []
+        filtered_counting = 0
+        threshold_data = self.load_status_data(threshold['name'], reference_dir)
         all_data = self.load_data(file_name)
-        # for data in all_data:
-            
         
-    
-    
-    def counting_status(self, file_name="all_data.json"):
+        delete_count = {
+            "未達 article_charge 標準": 0,
+            "Reason 是「未抓取成功」/「裁定判決」": 0,
+            "不存在main_text, fact...": 0,
+            "多位犯罪者": 0,
+            "沒擷取到犯罪者資訊": 0
+        }
+        for data in tqdm(all_data, desc="filter_TWLJP"):
+            
+            keep_data = True  # 預設為保留數據
+            
+            # @ 檢查 article-charge
+            for article in data['meta']['relevant_articles_org']:
+                if threshold['name'] == 'article_charge':
+                    combined_key = f"{article}-{data['meta']['indictment_accusation']}"
+                    if int(threshold_data[combined_key]) <= int(threshold['number']): # 如果不符合條件，標記為不保留
+                        keep_data = False  
+                        delete_count["未達 article_charge 標準"] += 1
+                    
+            # @ 檢查 reason
+            if data['reason'] == 4 or data['reason'] == -1:
+                keep_data = False
+                delete_count["Reason 是「未抓取成功」/「裁定判決」"] += 1
+                
+            # @ 檢查不存在項目
+            if data['fact'] == "" or data['main_text'] == "" or data['meta']['indictment_accusation'] == "" or data['meta']['judgment_accusation'] == "":
+                keep_data = False
+                delete_count["不存在main_text, fact..."] += 1
+                
+            # @ 刪掉多位犯罪者
+            if int(data['meta']['#_criminals']) > 1:
+                keep_data = False
+                delete_count["多位犯罪者"] += 1
+                
+            # @ 沒截到犯罪者
+            if int(data['meta']['#_criminals']) < 1:
+                keep_data = False
+                delete_count["沒擷取到犯罪者資訊"] += 1
+                    
+            if keep_data: filtered_data.append(data)  # 只有符合條件的數據才被添加
+            else: filtered_counting += 1
+                
+            
+        # - 儲存檔案
+        save_file_path = f"{self.save_path}/TWLJP/"
+        file_name = "filter_data.json"
+        json_content = "\n".join([json.dumps(item, ensure_ascii=False) for item in filtered_data])
+        self.check_and_create_directories(self.save_path, ['TWLJP'])   # = 路徑防呆
+        self.save_to_file(f"{save_file_path}{file_name}", json_content)
+        
+        # @ 結果
+        final_result = f"[filter_TWLJP] 從 {file_name} 中，過濾資料: {len(all_data)} -> {filtered_counting} ( 刪掉 -{len(all_data) - filtered_counting})"
+        logging.info(final_result)
+        logging.info(f"\t未達 article_charge 標準: {delete_count['未達 article_charge 標準']}")
+        logging.info(f"\tReason 是「未抓取成功」/「裁定判決」: {delete_count['Reason 是「未抓取成功」/「裁定判決」']}")
+        logging.info(f"\t不存在main_text, fact...: {delete_count['不存在main_text, fact...']}")
+        logging.info(f"\t多位犯罪者: {delete_count['多位犯罪者']}")
+        logging.info(f"\t沒擷取到犯罪者資訊: {delete_count['沒擷取到犯罪者資訊']}")
+        
+        filter_content = [f"{key}, {value}" for key, value in delete_count.items()]
+        filter_content.append(final_result)
+        save_filter_file_path = f"{self.save_path}filter_result.txt"
+        self.save_to_file(save_filter_file_path, "\n".join(filter_content))
+        
+        
+    # -v- 資料內容 filter
+    def counting_status(self, file_name="all_data.json", save_dir='ori/'):
         (
-            accumulated_charge_dict, accumulated_article_dict, accumulated_combine_charge_article_dict,
+            accumulated_charge_dict, accumulated_article_dict, accumulated_combine_article_charge_dict, accumulated_law,
             accumulated_criminals_dict, accumulated_penalty_dict, accumulated_reason_dict,
             accumulated_error_dict,
             
-            accumulated_total_charges, accumulated_total_article, accumulated_total_combine_charge_article,
-            accumulated_total_mult_criminals, accumulated_total_penalty, accumulated_total_reason,
+            accumulated_total_charges, accumulated_total_article, accumulated_total_combine_article_charge, accumulated_total_law,
+            accumulated_total_multi_criminals, accumulated_total_penalty, accumulated_total_reason,
             accumulated_total_error
             
         ) = self.initialize_accumulators()
-        
+        self.check_and_create_files([   'charges', 'article', 'criminals', 
+                                        'penalty', 'reason', 'article_charge',
+                                        'error' ],
+                                    save_dir)
         all_data = self.load_data(file_name)
-        for data in all_data:
+        for data in tqdm(all_data, desc="counting_status"):
             
             # - 計數器
                 
             # @ Reason 狀況
             accumulated_reason_dict[REASON(data['reason']).name] += 1
             accumulated_total_reason += 1
-            self.save_results(accumulated_reason_dict, 'reason', accumulated_total_reason)
+            self.save_results(accumulated_reason_dict, 'reason', accumulated_total_reason, save_dir)
         
             # @ Penalty 狀況
             accumulated_penalty_dict[PENALTY(data['penalty']).name] += 1
             accumulated_total_penalty += 1
-            self.save_results(accumulated_penalty_dict, 'penalty', accumulated_total_penalty)
+            self.save_results(accumulated_penalty_dict, 'penalty', accumulated_total_penalty, save_dir)
         
             # @ 多人犯罪者
             accumulated_criminals_dict[data['meta']['#_criminals']] += 1
-            accumulated_total_mult_criminals += 1
-            self.save_results(accumulated_criminals_dict, 'criminals', accumulated_total_mult_criminals)
+            accumulated_total_multi_criminals += 1
+            self.save_results(accumulated_criminals_dict, 'criminals', accumulated_total_multi_criminals, save_dir)
         
             # @ 起訴書、簡易判決處刑書： charge
             if data['meta']['indictment_accusation'] != "":
                 accumulated_total_charges += 1
                 accumulated_charge_dict[data['meta']['indictment_accusation']] += 1
-            self.save_results(accumulated_charge_dict, 'charges', accumulated_total_charges)
+            self.save_results(accumulated_charge_dict, 'charges', accumulated_total_charges, save_dir)
             
             # @ 法條數量: article
             accumulated_total_article += data['meta']['#_relevant_articles']
             for key in data['meta']['relevant_articles_org']:
                 accumulated_article_dict[key] += 1
-            self.save_results(accumulated_article_dict, 'article', accumulated_total_article)
+            self.save_results(accumulated_article_dict, 'article', accumulated_total_article, save_dir)
         
             # @ article + charge
             for article in data['meta']['relevant_articles_org']:
                 combined_key = f"{article}, {data['meta']['indictment_accusation']}"
-                accumulated_combine_charge_article_dict[combined_key] += 1
-                accumulated_total_combine_charge_article += 1
-            self.save_results(accumulated_combine_charge_article_dict, 'charge_article', accumulated_total_combine_charge_article)
+                accumulated_combine_article_charge_dict[combined_key] += 1
+                accumulated_total_combine_article_charge += 1
+            self.save_results(accumulated_combine_article_charge_dict, 'article_charge', accumulated_total_combine_article_charge, save_dir)
+        
+            # @ law
+            for article in data['meta']['relevant_articles']:
+                accumulated_law[article[0]] += 1
+                accumulated_total_law += 1
+            self.save_results(accumulated_law, 'law', accumulated_total_law, save_dir)
+                
         
             # @ ERROR
             if data['main_text'] == '':
@@ -295,52 +356,129 @@ class ProcessAILA:
                 accumulated_error_dict['indictment_accusation'] += 1
             if data['meta']['judgment_accusation'] == '':
                 accumulated_error_dict['judgment_accusation'] += 1
-            self.save_results(accumulated_error_dict, 'error', '')
+            self.save_results(accumulated_error_dict, 'error', '', save_dir)
             
         # - 在文件處理完畢後保存結果
-        logging.info(f"這次總共取樣 {len(all_data)} 筆資料")
-        logging.info(f"re_criminals 總共 {accumulated_total_mult_criminals}, 1個犯罪者: {accumulated_criminals_dict[1]}, 0個犯罪者的: {accumulated_criminals_dict[0]}")
-        logging.info(f"re_article 總共 {accumulated_total_article}")
-        logging.info(f"re_charges 總共 {accumulated_total_charges}")
-        logging.info(f"re_reason 總共 {accumulated_total_reason}")
-        logging.info(f"re_penalty 總共 {accumulated_total_penalty}")
+        logging.info(f"[counting_status] 從 {file_name} 總共取樣 {len(all_data)} 筆資料")
+        logging.info(f"\tre_criminals 總共 {accumulated_total_multi_criminals}, 1個犯罪者: {accumulated_criminals_dict[1]}, 0個犯罪者的: {accumulated_criminals_dict[0]}")
+        logging.info(f"\tre_article 總共 {accumulated_total_article}")
+        logging.info(f"\tre_charges 總共 {accumulated_total_charges}")
+        logging.info(f"\tre_reason 總共 {accumulated_total_reason}")
+        logging.info(f"\tre_penalty 總共 {accumulated_total_penalty}")
         
-        
-    # def random_samples(self, random_size = 10, file_path="/TWLJP/all_data.json"):
-        
-    #     save_path = f'{self.save_path}TWLJP/random.json'
-    #     print(f"Do the [random_samples] (size={random_size}) from={file_path}, in={save_path}")
-        
-    #     all_data = self.load_data(file_path)
-    #     if len(all_data) > random_size:
-    #         random_data = random.sample(all_data, random_size)
-    #     else:
-    #         print(f"random_size({random_size}) < total_size({len(all_data)})")
-    #         random_data = all_data
-        
-    #     # 隨機抽取 random_size 筆數據
-    #     with open(save_path, 'w', encoding='utf-8') as file:
-    #         for item in random_data:
-    #             file.write(json.dumps(item, ensure_ascii=False))
-    #             file.write('\n')
-                
-    # # 拆檔案 test_size validation_size
-    # def train_test_split(self, file_path="/TWLJP/all_data.json", test_size=0.2, validation_size=0.1):
-        
-    #     # 獲取檔案 all_data 拆檔案
-        
-    #     all_data = self.load_data(file_path)
-        
-    #     train_data, test_data = train_test_split(all_data, test_size=test_size) # 分割訓練集和測試集
-    #     train_data, validation_data = train_test_split(train_data, test_size=validation_size / (1 - test_size)) # 再從訓練集中分割出驗證集
-
-    #     # 將分割後的資料儲存為不同的檔案
-    #     for data, suffix in zip([train_data, test_data, validation_data], ['train', 'test', 'validation']):
-    #         with open(f'{self.save_path}TWLJP/{suffix}.json', 'w', encoding='utf-8') as file:
-    #             for item in data:
-    #                 file.write(json.dumps(item, ensure_ascii=False))
-    #                 file.write('\n')
     
+    # -v- 隨機 Sample
+    def random_samples(self, random_size = 10, file_name="all_data.json"):
+        
+        save_path = f'{self.save_path}TWLJP/random.json'
+        all_data = self.load_data(file_name)
+        if len(all_data) > random_size:
+            random_data = random.sample(all_data, random_size)
+        else:
+            print(f"random_size({random_size}) < total_size({len(all_data)})")
+            random_data = all_data
+        
+        # 隨機抽取 random_size 筆數據
+        with open(save_path, 'w', encoding='utf-8') as file:
+            for item in random_data:
+                file.write(json.dumps(item, ensure_ascii=False))
+                file.write('\n')
+                
+    # -v- 拆檔案 test_size validation_size
+    def train_test_split(self, file_name="all_data.json", test_size=0.2, validation_size=0.1):
+        
+        # 獲取檔案 all_data 拆檔案
+        
+        all_data = self.load_data(file_name)
+        train_data, test_data = train_test_split(all_data, test_size=test_size) # 分割訓練集和測試集
+        train_data, validation_data = train_test_split(train_data, test_size=validation_size / (1 - test_size)) # 再從訓練集中分割出驗證集
+
+        # 將分割後的資料儲存為不同的檔案
+        folder_path = f'{self.save_path}TWLJP/formal/'
+        if not path.exists(folder_path):
+            makedirs(folder_path)
+            
+        for data, suffix in zip([train_data, test_data, validation_data], ['train', 'test', 'validation']):
+            with open(f'{folder_path}{suffix}.json', 'w', encoding='utf-8') as file:
+                for item in data:
+                    file.write(json.dumps(item, ensure_ascii=False))
+                    file.write('\n')
+    
+    
+    # -v- TWLJP => 1, 2, 3
+    def category_data(self, file_name="filter_data.json"):
+        
+        all_data = self.load_data(file_name)    
+        
+        task_1 = []
+        task_2 = []
+        task_3 = []
+        task_4 = []
+        
+        for data in tqdm(all_data, desc="category_data"):
+            
+            # -v- TASK: 1 (有罪)
+            if data['punishment'] != False:
+                task_1.append(data)
+        
+            # -v- TASK: 2 (刑期：只留下有刑期的部分，有罰金就不要)
+            if data['punishment'] != False and data['penalty'] == 1:
+                task_2.append(data)
+            
+            # -v- TASK: 3 (罰金：只留下有罰金的部分，有刑期就不要)
+            if data['punishment'] != False and data['penalty'] == 2:
+                task_3.append(data)
+                
+            # -v- TASK: 4 (罰金 + 刑期)
+            if data['punishment'] != False and data['penalty'] == 3:
+                task_4.append(data)
+                
+
+        # - 存擋
+        save_file_path = f"{self.save_path}/TWLJP/category/"
+        self.check_and_create_directories(self.save_path, ['TWLJP/category'])   # = 路徑防呆
+        
+        # @ 存擋： TASK 1
+        file_name = "TWLJP_1.json"
+        json_content = "\n".join([json.dumps(item, ensure_ascii=False) for item in task_1])
+        self.save_to_file(f"{save_file_path}{file_name}", json_content)
+        
+        # @ 存擋： TASK 2
+        file_name = "TWLJP_2.json"
+        json_content = "\n".join([json.dumps(item, ensure_ascii=False) for item in task_2])
+        self.save_to_file(f"{save_file_path}{file_name}", json_content)
+        
+        # @ 存擋： TASK 3
+        file_name = "TWLJP_3.json"
+        json_content = "\n".join([json.dumps(item, ensure_ascii=False) for item in task_3])
+        self.save_to_file(f"{save_file_path}{file_name}", json_content)
+        
+        # @ 存擋： TASK 4
+        file_name = "TWLJP_4.json"
+        json_content = "\n".join([json.dumps(item, ensure_ascii=False) for item in task_4])
+        self.save_to_file(f"{save_file_path}{file_name}", json_content)
+        
+        # @ 存擋： TEST
+        # file_name = "only_amount.json"
+        # json_content = "\n".join([json.dumps(item, ensure_ascii=False) for item in task_4])
+        # self.save_to_file(f"{save_file_path}{file_name}", json_content)
+        
+        # - 總結計算
+        category_result = [
+            f"TASK_1, {len(task_1)}",
+            f"TASK_2, {len(task_2)}",
+            f"TASK_3, {len(task_3)}",
+            f"TASK_4, {len(task_4)}" 
+        ]
+        save_filter_file_path = f"{self.save_path}countLength_category.txt"
+        self.save_to_file(save_filter_file_path, "\n".join(category_result))
+        
+        logging.info(f"[category_data] 從 {file_name} 總共取樣 {len(all_data)} 筆資料")
+        logging.info(f"\t{category_result[0]}")
+        logging.info(f"\t{category_result[1]}")
+        logging.info(f"\t{category_result[2]}")
+        logging.info(f"\t{category_result[3]}")
+        
     
     # ---------------------------------------------------------------------------------------------------- 判決書細項目
     def split_content_by_separator(self, content, separator):
@@ -454,7 +592,7 @@ class ProcessAILA:
 
         # @ step 3: 增加 article
         if is_article_line and '證據並所犯法條' not in line:
-            case_reasons = self.load_case_reasons(f"{self.save_path}charges/charges_count.txt")
+            case_reasons = self.load_case_reasons(f"{self.save_path}ori/charges/charges_count.txt")
             all_law_reasons = list(case_reasons) + default_law_article # = 把所有可能性地 law 都結合起來
             
             line_article_list = self.line_split_article(line, all_law_reasons)
@@ -486,6 +624,10 @@ class ProcessAILA:
         return original_article_list, case_reason_list, total_article, is_article_line, 
     
     def load_case_reasons(self, file_path):
+        
+        if not path.exists(file_path):
+            open(file_path, 'w', encoding='utf-8').close()
+        
         with open(file_path, 'r', encoding='utf-8') as file:
             return {line.split(',')[0].strip() for line in file}
     
@@ -585,7 +727,7 @@ class ProcessAILA:
                 "二、犯罪事實要旨：", "證據並所犯法條"
             ]
             for stop_term in stop_list:
-                if text == stop_term:
+                if text in stop_term:
                     # print("========= 結束")
                     is_main_text = False
                     return result_main_text
@@ -738,9 +880,9 @@ class ProcessAILA:
         
     def punishment(self, reason):
         
-        if reason != 1:
+        if reason == 1:
             return True
-        elif reason == 1:
+        elif reason != 1:
             return False
         else:
             return None
@@ -752,32 +894,34 @@ class ProcessAILA:
         
         # 獲取檔案 all_data 拆檔案
         all_data = []
+        # 首先計算文件的總行數
+        total_lines = sum(1 for _ in open(f"{self.save_path}/TWLJP/{file_name}", 'r', encoding="utf-8"))
+        
+        # 使用 tqdm 包裹文件對象來追蹤進度
         with open(f"{self.save_path}/TWLJP/{file_name}", 'r', encoding="utf-8") as file:
-            for line in file:
+            for line in tqdm(file, total=total_lines, desc=f"Load Data {file_name}"):
                 all_data.append(json.loads(line))
                 
         return all_data
     
     # -v- 儲存個別結果
-    def save_results(self, case_reason_count, file_type, accumulated_total):
+    def save_results(self, case_reason_count, file_type, accumulated_total, save_dir):
         sorted_case_reasons = sorted(case_reason_count.items(), key=lambda x: x[1], reverse=True)
+        
+        self.check_and_create_directories(self.save_path, [f"{save_dir}{file_type}"])   # = 路徑防呆
 
         # 保存計數結果
-        save_file_path = f"{self.save_path}{file_type}/{file_type}_count.txt"
+        save_file_path = f"{self.save_path}{save_dir}{file_type}/{file_type}_count.txt"
         with open(save_file_path, 'w', encoding='utf-8') as writeFile:
             for reason, count in sorted_case_reasons:
                 writeFile.write(f"{reason}, {count}\n")
-                
             writeFile.write(f"TOTAL, {accumulated_total}\n")
-            
 
         # 僅保存案由
-        save_file_path = f"{self.save_path}{file_type}/{file_type}.txt"
+        save_file_path = f"{self.save_path}{save_dir}{file_type}/{file_type}.txt"
         with open(save_file_path, 'w', encoding='utf-8') as writeFile:
             for reason, _ in sorted_case_reasons:
                 writeFile.write(f"{reason}\n")   
-    
-    
     
     def save_to_json(self, save_file_path, filename, writeContent, comment=''):
         """
@@ -791,7 +935,7 @@ class ProcessAILA:
         
         # 確保保存文件的目錄存在
         if not path.isdir(save_file_path):
-            mkdir(save_file_path)
+            makedirs(save_file_path)
 
         # 拼接完整的文件路徑
         full_path = path.join(save_file_path, filename)
@@ -806,26 +950,32 @@ class ProcessAILA:
             
     # -v- 將 list 存到 file_path
     def save_to_file(self, file_path, content):
+        
         with open(file_path, 'w', encoding='utf-8') as writeFile:
             writeFile.write(content)
+            
+        logging.info(f"已存擋於 {file_path}")
     
     # -v- 防呆資料夾
-    def check_and_create_directories(self, save_path, required_dirs_=['charges', 'article', 'criminals', 'log']):
+    def check_and_create_directories(self, save_path, required_dirs_=['log', 'ori/charges/']):
         required_dirs = required_dirs_
         for dir in required_dirs:
             full_path = path.join(save_path, dir)
             if not path.isdir(full_path):
-                mkdir(full_path)
+                makedirs(full_path)
                 
-    def check_and_create_files(self, required_dirs=['charges', 'article', 'criminals', 'penalty']):
+    def check_and_create_files(self, 
+            required_dirs=['charges', 'article', 'criminals', 'penalty'],
+            save_dir='ori/'):
         for dir in required_dirs:
             # 檢查目錄是否存在，若不存在則創建
-            directory_path = path.join(self.save_path, dir)
+            directory_path = path.join(self.save_path, f"{save_dir}{dir}")
             if not path.exists(directory_path):
-                mkdir(directory_path)
+                makedirs(directory_path)
 
             # 為每個目錄創建兩個檔案
             for file_name in [f"{dir}.txt", f"{dir}_count.txt"]:
+                print(directory_path, file_name)
                 file_path = path.join(directory_path, file_name)
                 with open(file_path, 'w', encoding='utf-8') as writeFile:
                     pass 
@@ -873,30 +1023,49 @@ class ProcessAILA:
         accumulated_criminals_dict = defaultdict(int)
         accumulated_penalty_dict = defaultdict(int)
         accumulated_reason_dict = defaultdict(int)
-        accumulated_combine_charge_article_dict = defaultdict(int)
+        accumulated_combine_article_charge_dict = defaultdict(int)
+        accumulated_law = defaultdict(int)
         
         accumulated_error_dict  = defaultdict(int)
         
         # - 數量
         accumulated_total_charges = 0
         accumulated_total_article = 0
-        accumulated_total_mult_criminals = 0
+        accumulated_total_multi_criminals = 0
         accumulated_total_penalty = 0
         accumulated_total_reason = 0
-        accumulated_total_combine_charge_article = 0
+        accumulated_total_combine_article_charge = 0
+        accumulated_total_law = 0
         
         accumulated_total_error = 0
 
         return (
-            accumulated_charge_dict, accumulated_article_dict, accumulated_combine_charge_article_dict,
+            accumulated_charge_dict, accumulated_article_dict, accumulated_combine_article_charge_dict, accumulated_law,
             accumulated_criminals_dict, accumulated_penalty_dict, accumulated_reason_dict,
             accumulated_error_dict,
             
-            accumulated_total_charges, accumulated_total_article, accumulated_total_combine_charge_article,
-            accumulated_total_mult_criminals, accumulated_total_penalty, accumulated_total_reason,
+            accumulated_total_charges, accumulated_total_article, accumulated_total_combine_article_charge, accumulated_total_law,
+            accumulated_total_multi_criminals, accumulated_total_penalty, accumulated_total_reason,
             accumulated_total_error
         )
         
+    def load_status_data(self, file_name="article_charge", load_dir='ori/'):
+        
+        status_count = dict()
+        with open(f"{self.save_path}{load_dir}{file_name}/{file_name}_count.txt", 'r', encoding='utf-8') as file:
+            for line in file:
+                
+                # 移除換行符號並分割每一行
+                parts = line.strip().split(', ')
+                
+                if len(parts) > 2:
+                    combined = '-'.join(parts[:-1])  # 連接除了最後一個元素以外的所有元素
+                    status_count[combined] = parts[-1]  # 使用連接後的字串作為鍵，最後一個元素作為值
+                    
+                else:
+                    status_count[parts[0]] = parts[1]
+                
+        return status_count
 
     
 

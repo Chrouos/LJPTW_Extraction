@@ -18,29 +18,32 @@ processData = ProcessAILA(
     save_path='./data/processed/',
     mode=mode_arg,
     limit_counts=count_arg,
-    isRandomData=False
+    isRandomData=True
 )
 
-# 計算初始總筆數
-# processData.countLength_source()
+# @ 計算初始總筆數
+processData.countLength_source()
 
-# 負責處理擷取資訊，以及將資訊儲存到 log
+# @ 負責處理擷取資訊，以及將資訊儲存到 log
 processData.TWLJP_JSON()
 # => 輸出檔案為 all_data.json
 
-# 篩選資料
-# processData.filter_TWLJP("all_data.json")
+# @ 計算處理後資訊
+processData.counting_status("all_data.json", save_dir="ori/")
+
+# @ 篩選資料
+processData.filter_TWLJP({"name": "article_charge", "number": 30}, "all_data.json", reference_dir="ori/")
 # => 輸出檔案為 filter_data.json
 
-# 計算處理後資訊
-processData.counting_status("all_data.json")
+# @ 計算處理後資訊
+processData.counting_status("filter_data.json", save_dir="filter/")
 
-# 刪掉多犯罪者
-# processData.remove_multiple_criminals()
-# => 輸出檔案為 sigleCriminal_allData.json
+# @ 隨機抽樣, 預設為 10
+processData.random_samples(file_name="filter_data.json", random_size=10)
+# => 輸出檔案為 random.json
 
-# # 隨機抽樣, 預設為 10
-# processData.random_samples(file_path="/TWLJP/sigleCriminal_allData.json", random_size=10)
+# @ 分割 train test validation
+processData.train_test_split(file_name="filter_data.json")
 
-# # 分割 train test validation
-# processData.train_test_split(file_path="/TWLJP/sigleCriminal_allData.json")
+# @ 分類 TWLJP: 1, 2, 3
+processData.category_data(file_name="filter_data.json")

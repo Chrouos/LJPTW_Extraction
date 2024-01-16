@@ -1,0 +1,6 @@
+未達 article_charge 標準, 14213
+Reason 是「未抓取成功」/「裁定判決」, 13364
+不存在main_text, fact..., 5817
+多位犯罪者, 21991
+沒擷取到犯罪者資訊, 3409
+[filter_TWLJP] 從 filter_data.json 中，過濾資料: 376483 -> 44768 ( 刪掉 -331715)
