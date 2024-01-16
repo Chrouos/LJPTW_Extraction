@@ -385,7 +385,7 @@ class ProcessAILA:
                 file.write('\n')
                 
     # -v- 拆檔案 test_size validation_size
-    def train_test_split(self, file_name="all_data.json", test_size=0.2, validation_size=0.1):
+    def train_test_split(self, file_name="all_data.json", save_dir='', test_size=0.2, validation_size=0.1):
         
         # 獲取檔案 all_data 拆檔案
         
@@ -394,19 +394,28 @@ class ProcessAILA:
         train_data, validation_data = train_test_split(train_data, test_size=validation_size / (1 - test_size)) # 再從訓練集中分割出驗證集
 
         # 將分割後的資料儲存為不同的檔案
-        folder_path = f'{self.save_path}TWLJP/formal/'
+        folder_path = f'{self.save_path}TWLJP/formal/{save_dir}'
         if not path.exists(folder_path):
             makedirs(folder_path)
+            
+        # 初始化計數
+        counts = {'train': 0, 'test': 0, 'validation': 0}
             
         for data, suffix in zip([train_data, test_data, validation_data], ['train', 'test', 'validation']):
             with open(f'{folder_path}{suffix}.json', 'w', encoding='utf-8') as file:
                 for item in data:
                     file.write(json.dumps(item, ensure_ascii=False))
                     file.write('\n')
+                    counts[suffix] += 1 
+                    
+        # 寫入 count.txt
+        with open(f'{folder_path}count.txt', 'w', encoding='utf-8') as file:
+            for suffix, count in counts.items():
+                file.write(f'{suffix}, {count}\n')
     
     
     # -v- TWLJP => 1, 2, 3
-    def category_data(self, file_name="filter_data.json"):
+    def category_data(self, file_name="/filter_data.json"):
         
         all_data = self.load_data(file_name)    
         
@@ -479,6 +488,19 @@ class ProcessAILA:
         logging.info(f"\t{category_result[2]}")
         logging.info(f"\t{category_result[3]}")
         
+        
+    def category_train_test_split(self, test_size=0.2, validation_size=0.1):
+        # -v- TWLJP: 1
+        self.train_test_split(file_name="category/TWLJP_1.json", save_dir='TWLJP_1/', test_size=test_size, validation_size=validation_size)
+        
+        # -v- TWLJP: 2
+        self.train_test_split(file_name="category/TWLJP_2.json", save_dir='TWLJP_2/', test_size=test_size, validation_size=validation_size)
+        
+        # -v- TWLJP: 3
+        self.train_test_split(file_name="category/TWLJP_3.json", save_dir='TWLJP_3/', test_size=test_size, validation_size=validation_size)
+        
+        # -v- TWLJP: 4
+        self.train_test_split(file_name="category/TWLJP_4.json", save_dir='TWLJP_4/', test_size=test_size, validation_size=validation_size)
     
     # ---------------------------------------------------------------------------------------------------- 判決書細項目
     def split_content_by_separator(self, content, separator):

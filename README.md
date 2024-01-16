@@ -57,36 +57,34 @@ processData.train_test_split(file_path="/TWLJP/sigleCriminal_allData.json")
 
 ```
 
-資料夾格式
+資料夾格式: processed
 ```
-
-.
-├── TWLJP
-│   └── all_data.json 
-├── article
-│   ├── article.txt 
-│   └── article_count.txt
-├── charge_article
-│   ├── charge_article.txt
-│   └── charge_article_count.txt
-├── charges
-│   ├── charges.txt
-│   └── charges_count.txt
-├── countLength_source.txt
-├── criminals
-│   ├── criminals.txt
-│   └── criminals_count.txt
-├── error
-│   ├── error.txt
-│   └── error_count.txt
-├── log
-│   └── ProcessAILA.log
-├── penalty
-│   ├── penalty.txt
-│   └── penalty_count.txt
-└── reason
-    ├── reason.txt
-    └── reason_count.txt
+├── TWLJP # 存擋結構
+│   ├── category # 任務分類目標
+│   └── formal   # 正式訓練資料
+│       ├── TWLJP_1
+│       ├── TWLJP_2
+│       ├── TWLJP_3
+│       └── TWLJP_4
+├── filter # 過濾後的資料統計
+│   ├── article
+│   ├── article_charge
+│   ├── charges
+│   ├── criminals
+│   ├── error
+│   ├── law
+│   ├── penalty
+│   └── reason
+├── log # 操作 log
+└── ori # 原始資料的資料統計
+    ├── article
+    ├── article_charge
+    ├── charges
+    ├── criminals
+    ├── error
+    ├── law
+    ├── penalty
+    └── reason
 
 ```
 
