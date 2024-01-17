@@ -1244,7 +1244,6 @@ class ProcessAILA:
         with pd.ExcelWriter(f'{self.save_path}combined_categories_count.xlsx') as writer:
 
             for folder in base_folder:
-                df = pd.DataFrame() # 初始化一個空的 DataFrame
                 start_col = 0  # 初始化起始列
 
                 folder_path = path.join(base_path, folder)
