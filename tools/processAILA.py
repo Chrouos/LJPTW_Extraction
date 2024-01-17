@@ -66,10 +66,7 @@ class ProcessAILA:
             files = listdir(self.source_path + folder)
             self.source_fileList[folder] = sorted(file for file in files if file != '.DS_Store')
             
-        self.data_dict = {
-            "all_data": self.load_data(),
-            "filter_data": self.load_data("filter_data.json"),
-        }
+        
             
     # -v- 計算總共數量
     def countLength_source(self):
@@ -211,7 +208,7 @@ class ProcessAILA:
         self.save_to_file(f"{save_file_path}{file_name}", json_content)
         
         # -v- Reload & Done
-        self.data_dict['all_data'] = self.load_data()
+        
         print(f"[TWLJP_JSON] Done!")
         print(f"Save file to: {save_file_path}{file_name}")
         
@@ -225,7 +222,7 @@ class ProcessAILA:
         
         filtered_data = []
         filtered_counting = 0
-        all_data = self.data_dict[file_name.replace('.json', '')]
+        all_data = self.load_data(file_name)
         
         delete_count = {
             "Reason 是「未抓取成功」/「裁定判決」": 0,
@@ -268,7 +265,6 @@ class ProcessAILA:
         json_content = "\n".join([json.dumps(item, ensure_ascii=False) for item in filtered_data])
         self.check_and_create_directories(self.save_path, ['TWLJP'])   # = 路徑防呆
         self.save_to_file(f"{save_file_path}{file_name}", json_content)
-        self.data_dict[file_name.replace('.json', '')] = self.load_data(file_name)
         
         # - 篩第二次
         filter_dict, total_delete = self.check_filter_redo_data(file_name, threshold, reference_dir, save_dir="TWLJP/")
@@ -291,7 +287,6 @@ class ProcessAILA:
         self.save_to_file(save_filter_file_path, "\n".join(filter_content))
         
         # -v- Reload & Done
-        self.data_dict['filter_data'] = self.load_data(file_name)
         print(f"[filter_TWLJP] Done!")
         print(f"Save file to: {save_file_path}{file_name}")
         print(f"Save file to: {save_filter_file_path}")
@@ -316,12 +311,6 @@ class ProcessAILA:
         while is_redo:
                 
             # @ 獲得讀取資料
-            current_filtered_data = self.load_data(file_name)
-            
-            temp_file_name = file_name.replace('.json', '')
-            if temp_file_name in self.data_dict: 
-                self.data_dict[temp_file_name] = current_filtered_data
-            
             self.counting_status(file_name, reference_dir)
             
             # @ 判斷是否結束(都大於閥值)
@@ -338,6 +327,7 @@ class ProcessAILA:
             if is_redo == False: break
             else: redo_count += 1
             
+            current_filtered_data = self.load_data(file_name)
             filtered_data_final = []
             for data in tqdm(current_filtered_data, desc=f"filter_TWLJP (2/2) :{redo_count}"):
                 
@@ -402,11 +392,7 @@ class ProcessAILA:
                                         'error' ],
                                     save_dir)
         
-        temp_file_name = file_name.replace('.json', '')
-        if temp_file_name in self.data_dict:
-            all_data = self.data_dict[temp_file_name]
-        else:
-            all_data = self.load_data(file_name)
+        all_data = self.load_data(file_name)
             
         for data in tqdm(all_data, desc="counting_status"):
             
@@ -479,7 +465,7 @@ class ProcessAILA:
     def random_samples(self, random_size = 10, file_name="all_data.json"):
         
         save_path = f'{self.save_path}TWLJP/random.json'
-        all_data = self.data_dict[file_name.replace('.json', '')]
+        all_data = self.load_data(file_name)
         
         if len(all_data) > random_size:
             random_data = random.sample(all_data, random_size)
