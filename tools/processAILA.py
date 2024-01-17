@@ -12,7 +12,7 @@ import time
 from collections import defaultdict, Counter
 from datetime import datetime
 from enum import Enum
-from os import listdir, makedirs, path, remove, makedirs
+from os import listdir, makedirs, path, remove, makedirs, walk
 from os.path import isdir, join
 
 import pandas as pd
@@ -989,7 +989,7 @@ class ProcessAILA:
             (1) 有罪
             (2) 免刑
             (3) 不受理
-            (4) 裁定判決
+            (4) 裁定
             
             (-1) 管轄錯誤、駁回、延長羈押、補正資料
         """
@@ -1217,6 +1217,55 @@ class ProcessAILA:
                     status_count[parts[0]] = int(parts[1])
                 
         return status_count
+    
+    
+    def statistics_to_excel(self):
+        base_folder = ["ori", "filter" , "TWLJP_1", "TWLJP_2", "TWLJP_3", "TWLJP_4"]
+        base_path = './data/processed/statistics/'
+        
+        def load_status_data(file_path):
+            status_count = dict()
+            with open(f"{file_path}", 'r', encoding='utf-8') as file:
+                for line in file:
+                    parts = line.strip().split(', ')
+                    
+                    if len(parts) > 2:
+                        combined = '-'.join(parts[:-1])  # 連接除了最後一個元素以外的所有元素
+                        status_count[combined] = int(parts[-1])  # 使用連接後的字串作為鍵，最後一個元素作為值
+                    
+                    elif len(parts) < 2: pass
+                    
+                    else:
+                        status_count[parts[0]] = int(parts[1])
+                    
+            return status_count
+        
+        # 使用 ExcelWriter 將數據寫入 Excel
+        with pd.ExcelWriter(f'{self.save_path}combined_categories_count.xlsx') as writer:
+
+            for folder in base_folder:
+                df = pd.DataFrame() # 初始化一個空的 DataFrame
+                start_col = 0  # 初始化起始列
+
+                folder_path = path.join(base_path, folder)
+                sheet_name = folder  # 將工作表命名為當前資料夾名稱
+
+                for subdir, dirs, files in walk(folder_path):
+                    for file in files:
+                        file_path = path.join(subdir, file)
+
+                        if file_path.endswith('_count.txt'):
+                            category_name = path.basename(file).split('_')[0]
+                            category_dict = load_status_data(file_path)
+
+                            # 將字典轉換為 DataFrame
+                            temp_df = pd.DataFrame(list(category_dict.items()), columns=[category_name, f'{category_name}_count'])
+
+                            # 將 temp_df 添加到 df，並在其之前留出一列空白
+                            temp_df.to_excel(writer, sheet_name=sheet_name, startcol=start_col, index=False)
+
+                            # 更新 start_col 以便下一個 DataFrame 從適當的列開始
+                            start_col += len(temp_df.columns) + 1
 
     
 
@@ -1244,7 +1293,7 @@ class REASON(Enum):
     有罪 = 1
     免刑 = 2
     不受理 = 3
-    裁定判決 = 4
+    裁定 = 4
     
 class PENALTY(Enum):
     

@@ -3,5 +3,6 @@ data/data_test
 all_data.json
 
 *.log
+.DS_Store
 
 TWLJP/

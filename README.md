@@ -96,7 +96,7 @@ content_dict = {
         }
     },
     
-    "reason": reason,   # (0) 無罪  (1) 有罪 (2) 免刑 (3) 不受理 (4)裁定判決  (default = (-1) 未抓取成功 )
+    "reason": reason,   # (0) 無罪  (1) 有罪 (2) 免刑 (3) 不受理 (4)裁定  (default = (-1) 未抓取成功 )
     "penalty": penalty, # (0) 無 (1) 只有刑期 (2) 只有罰金 (3) 刑期＋罰金
     "punishment": self.punishment(reason),     # True(有罪)、False(無罪、免刑、不受理)
     
