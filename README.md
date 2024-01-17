@@ -152,9 +152,9 @@ statistics
     │   └── article, article_charge, charges, criminals, error, law, penalty, reason
     │       ├── {key}.txt           # 未包含數字的數據，純Key
     │       └── {key}_count.txt     # 統計數據數量
-    ├── log # 處理 log
-        ├── ALL_ProcessAILA.log # 過去的所有 log 紀錄
-        └── ProcessAILA.log     # 最後一次的 log 紀錄
+└── log # 處理 log
+    ├── ALL_ProcessAILA.log # 過去的所有 log 紀錄
+    └── ProcessAILA.log     # 最後一次的 log 紀錄
 
 
 ```
