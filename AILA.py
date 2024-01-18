@@ -21,24 +21,18 @@ processData = ProcessAILA(
     isRandomData=True
 )
 
-# @ 計算初始總筆數
-processData.countLength_source()
 
-# @ 負責處理擷取資訊，以及將資訊儲存到 log # => 輸出檔案為 all_data.json
-processData.TWLJP_JSON()
+processData.countLength_source() # @ 計算初始總筆數
+processData.TWLJP_JSON() # @ 負責處理擷取資訊，以及將資訊儲存到 log # => 輸出檔案為 all_data.json
+processData.counting_status("all_data.json", save_dir="statistics/ori/") # @ 計算處理前資訊
+processData.filter_TWLJP([{"name": "article", "number": 30}, {"name": "charges", "number": 30}], "all_data.json", reference_dir="statistics/filter/") # @ 篩選資料 # => 輸出檔案為 filter_data.json
+processData.category_data(file_name="filter_data.json", is_filter=True) # @ 分類 TWLJP: 1, 2, 3
+processData.category_train_test_split() # @ 分割 train test validation # => 輸出檔案為 TWLJP: 1, 2, 3, 4
 
-# @ 計算處理前資訊
-processData.counting_status("all_data.json", save_dir="statistics/ori/")
-
-# @ 篩選資料 # => 輸出檔案為 filter_data.json
-processData.filter_TWLJP([{"name": "article", "number": 30}, {"name": "charges", "number": 30}], "all_data.json", reference_dir="statistics/filter/")
-
-# @ 分類 TWLJP: 1, 2, 3
-processData.category_data(file_name="filter_data.json", is_filter=True)
-
-# @ 分割 train test validation # => 輸出檔案為 TWLJP: 1, 2, 3, 4
-processData.category_train_test_split()
+# @ 統計
+processData.statistics_to_excel()
 
 # @ 隨機抽樣, 預設為 10
 # processData.random_samples(file_name="filter_data.json", random_size=10)
 # => 輸出檔案為 random.json
+

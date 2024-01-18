@@ -150,7 +150,7 @@ class ProcessAILA:
                 
                 judgment_number = self.re_charges(content_split[1], r'裁判字號：(.+)')
                 reason = self.re_reason(main_text, amount_count, imprisonment_count, fileName, judgment_number)
-                penalty = self.re_penalty(amount_count, imprisonment_count)
+                is_fine, is_imprisonment, penalty = self.re_is_fine_imprisonments(amount_count, imprisonment_count)
                 
                 # @ 存擋格式
                 content_dict = {
@@ -191,6 +191,8 @@ class ProcessAILA:
                     
                     "reason": reason,   # (0) 無罪  (1) 有罪 (2) 免刑 (3) 不受理  (default = (-1) 未抓取成功 )
                     "penalty": penalty, # (0) 無 (1) 只有刑期 (2) 只有罰金 (3) 刑期＋罰金
+                    "fine": is_fine,       # True(有罰金) False(無罰金)
+                    "imprisonment": is_imprisonment,       # True(有刑期) False(無刑期)
                     "punishment": self.punishment(reason),     # True(有罪)、False(無罪、免刑、不受理)
                     
                     "ori_indictment_content": content_split[0],
@@ -219,17 +221,23 @@ class ProcessAILA:
                         file_name="all_data.json",
                         reference_dir='statistics/filter/'
                     ):
-        
-        filtered_data = []
-        filtered_counting = 0
-        all_data = self.load_data(file_name)
-        
+
         delete_count = {
             "Reason 是「未抓取成功」/「裁定判決」": 0,
             "不存在main_text, fact...": 0,
             "多位犯罪者": 0,
             "沒擷取到犯罪者資訊": 0
         }
+        
+        # - 想調出來看的錯誤資訊
+        no_match = []
+        no_criminal = []
+        no_reason = []
+        multi_criminals = []
+        
+        filtered_data = []
+        filtered_counting = 0
+        all_data = self.load_data(file_name)
         
         # - 篩第一次
         for data in tqdm(all_data, desc="filter_TWLJP (1/2)"):
@@ -240,38 +248,45 @@ class ProcessAILA:
             if data['reason'] == 4 or data['reason'] == -1:
                 keep_data = False
                 delete_count["Reason 是「未抓取成功」/「裁定判決」"] += 1
+                no_reason.append(data['file'])
                 
             # @ 檢查不存在項目
-            if data['fact'] == "" or data['main_text'] == "" or data['meta']['indictment_accusation'] == "" or data['meta']['judgment_accusation'] == "" or data['meta']['#_relevant_articles_judge'] == 0:
+            if data['main_text'] == '' or data['fact'] == '' or data['meta']['indictment_accusation'] == '' or data['meta']['judgment_accusation'] == '':
                 keep_data = False
                 delete_count["不存在main_text, fact..."] += 1
+                no_match.append(data['file'])
                 
             # @ 刪掉多位犯罪者
             if int(data['meta']['#_criminals']) > 1:
                 keep_data = False
                 delete_count["多位犯罪者"] += 1
+                multi_criminals.append(data['file'])
                 
             # @ 沒截到犯罪者
             if int(data['meta']['#_criminals']) < 1:
                 keep_data = False
                 delete_count["沒擷取到犯罪者資訊"] += 1
+                no_criminal.append(data['file'])
                     
             if keep_data == True: filtered_data.append(data)  # 只有符合條件的數據才被添加
             else: filtered_counting += 1
             
         # -v- 儲存檔案
-        save_file_path = f"{self.save_path}/TWLJP/"
-        file_name = "filter_data.json"
-        json_content = "\n".join([json.dumps(item, ensure_ascii=False) for item in filtered_data])
-        self.check_and_create_directories(self.save_path, ['TWLJP'])   # = 路徑防呆
-        self.save_to_file(f"{save_file_path}{file_name}", json_content)
+        print(len(filtered_data))
+        self.save_line_json_to_file("TWLJP/", "filter_data.json", filtered_data)
+        self.counting_status("filter_data.json", save_dir="statistics/filter/")
+        
+        # -v- 儲存錯誤檔案
+        self.save_line_json_to_file("statistics/filter/error/", "no_match.json", no_match)
+        self.save_line_json_to_file("statistics/filter/error/", "no_criminal.json", no_criminal)
+        self.save_line_json_to_file("statistics/filter/error/", "no_reason.json", no_reason)
+        self.save_line_json_to_file("statistics/filter/error/", "multi_criminals.json", multi_criminals)
         
         # - 篩第二次
-        filter_dict, total_delete = self.check_filter_redo_data(file_name, threshold, reference_dir, save_dir="TWLJP/")
-
+        filter_dict, total_delete = self.check_filter_redo_data("filter_data.json", threshold, reference_dir, save_dir="TWLJP/")
+        
         # @ 結果
-        final_result = f"[filter_TWLJP] 從 {file_name} 中，過濾資料: {len(all_data)} -> {len(all_data) - filtered_counting - total_delete}  ( 刪掉 -{filtered_counting + total_delete})"
-        print(final_result)
+        final_result = f"[filter_TWLJP] 從 {file_name} 中，過濾資料: {len(all_data)} -> {len(all_data) - filtered_counting - total_delete}  ( 刪掉過濾小於30 -{total_delete}, 濾掉其他資料 -{filtered_counting})"
         logging.info(final_result)
         logging.info(f"\t根據 threshold 刪除 {total_delete}")
         logging.info(f"\t各別刪除 {filter_dict}")
@@ -286,10 +301,25 @@ class ProcessAILA:
         save_filter_file_path = f"{self.save_path}filter_result.txt"
         self.save_to_file(save_filter_file_path, "\n".join(filter_content))
         
+        # @ 儲存 error counting
+        filter_content = [f"no_match, {len(no_match)}", f"no_criminal, {len(no_criminal)}", f"no_reason, {len(no_reason)}"]
+        filter_content.append(final_result)
+        save_filter_file_path = f"{self.save_path}error_result.txt"
+        self.save_to_file(save_filter_file_path, "\n".join(filter_content))
+        
         # -v- Reload & Done
         print(f"[filter_TWLJP] Done!")
-        print(f"Save file to: {save_file_path}{file_name}")
         print(f"Save file to: {save_filter_file_path}")
+        
+    
+    def save_line_json_to_file(self, folder_name, file_name, line_json_list_data):
+        
+        save_file_path = f"{self.save_path}{folder_name}"
+        json_content = "\n".join([json.dumps(item, ensure_ascii=False) for item in line_json_list_data])
+        self.check_and_create_directories(self.save_path, [folder_name])   # = 路徑防呆
+        self.save_to_file(f"{save_file_path}{file_name}", json_content)
+        
+        print(f"Save file to: {save_file_path}{file_name}")
         
         
     def check_filter_redo_data(self, 
@@ -309,12 +339,10 @@ class ProcessAILA:
         total_delete = 0
         
         while is_redo:
-                
-            # @ 獲得讀取資料
-            self.counting_status(file_name, reference_dir)
             
             # @ 判斷是否結束(都大於閥值)
             is_redo = False
+            self.counting_status(file_name, save_dir=reference_dir)
             for item in threshold:
                 threshold_data = self.load_status_data(item['name'], reference_dir)
                 min_value = min(threshold_data.values())
@@ -329,6 +357,8 @@ class ProcessAILA:
             
             current_filtered_data = self.load_data(file_name)
             filtered_data_final = []
+            
+            # - 過濾小於 threshold
             for data in tqdm(current_filtered_data, desc=f"filter_TWLJP (2/2) :{redo_count}"):
                 
                 keep_data = True  # 預設為保留數據
@@ -362,14 +392,12 @@ class ProcessAILA:
                                 delete_count['article_charge'].append(combined_key)
                                 break
                             
-                if keep_data == True: 
-                    filtered_data_final.append(data)  # 只有符合條件的數據才被添加
+                if keep_data == True: filtered_data_final.append(data)  # 只有符合條件的數據才被添加
                 else: total_delete += 1
             
             # - 儲存檔案
-            json_content = "\n".join([json.dumps(item, ensure_ascii=False) for item in filtered_data_final])
-            self.check_and_create_directories(self.save_path, ['TWLJP'])   # = 路徑防呆
-            self.save_to_file(f"{self.save_path}{save_dir}{file_name}", json_content)
+            self.save_line_json_to_file(save_dir, file_name, filtered_data_final)
+            
             
         return delete_count, total_delete
         
@@ -402,7 +430,7 @@ class ProcessAILA:
             accumulated_total_reason += 1
             self.save_results(accumulated_reason_dict, 'reason', accumulated_total_reason, save_dir)
         
-            # @ Penalty 狀況
+            # @ penalty 狀況
             accumulated_penalty_dict[PENALTY(data['penalty']).name] += 1
             accumulated_total_penalty += 1
             self.save_results(accumulated_penalty_dict, 'penalty', accumulated_total_penalty, save_dir)
@@ -443,7 +471,7 @@ class ProcessAILA:
                 accumulated_error_dict['main_text'] += 1
             if data['fact'] == '':
                 accumulated_error_dict['fact'] += 1
-            if data['reason'] == -1:
+            if data['reason'] == -1 or data['reason'] == 4:
                 accumulated_error_dict['reason'] += 1
             if data['meta']['indictment_accusation'] == '':
                 accumulated_error_dict['indictment_accusation'] += 1
@@ -516,29 +544,18 @@ class ProcessAILA:
         
         all_data = self.load_data(file_name)    
         
-        task_1 = []
-        task_2 = []
-        task_3 = []
-        task_4 = []
+        task_1 = [] # = 全部的資料
+        task_2 = [] # = 去掉沒有刑罰的案件
+        
         
         for data in tqdm(all_data, desc="category_data"):
             
-            # -v- TASK: 1 (有罪)
-            if data['punishment'] != False:
-                task_1.append(data)
-        
-            # -v- TASK: 2 (刑期：只留下有刑期的部分，有罰金就不要)
-            if data['punishment'] != False and data['penalty'] == 1:
-                task_2.append(data)
+            # -v- LJP_1: 全部的資料 
+            task_1.append(data)
             
-            # -v- TASK: 3 (罰金：只留下有罰金的部分，有刑期就不要)
-            if data['punishment'] != False and data['penalty'] == 2:
-                task_3.append(data)
-                
-            # -v- TASK: 4 (罰金 + 刑期)
-            if data['punishment'] != False and data['penalty'] == 3:
-                task_4.append(data)
-                
+            # -v- LJP_2: 只留下有罪的部分（有刑期的部分）
+            if data['fine'] == True or data['imprisonment'] == True:
+                task_2.append(data)
 
         # - 存擋
         save_file_path = f"{self.save_path}/TWLJP/category/"
@@ -548,7 +565,6 @@ class ProcessAILA:
         file_name = "TWLJP_1.json"
         json_content = "\n".join([json.dumps(item, ensure_ascii=False) for item in task_1])
         self.save_to_file(f"{save_file_path}{file_name}", json_content)
-        # self.counting_status("category/TWLJP_1.json", save_dir="statistics/TWLJP_1/")
         if is_filter:
             filter_dict, total_delete = self.check_filter_redo_data(    
                                             file_name="category/TWLJP_1.json", 
@@ -561,7 +577,6 @@ class ProcessAILA:
         file_name = "TWLJP_2.json"
         json_content = "\n".join([json.dumps(item, ensure_ascii=False) for item in task_2])
         self.save_to_file(f"{save_file_path}{file_name}", json_content)
-        # self.counting_status("category/TWLJP_2.json", save_dir="statistics/TWLJP_2/")
         if is_filter:
             filter_dict, total_delete = self.check_filter_redo_data(    
                                             file_name="category/TWLJP_2.json", 
@@ -570,39 +585,10 @@ class ProcessAILA:
                                             save_dir = f"TWLJP/"
                                         )
         
-        
-        # @ 存擋： TASK 3
-        file_name = "TWLJP_3.json"
-        json_content = "\n".join([json.dumps(item, ensure_ascii=False) for item in task_3])
-        self.save_to_file(f"{save_file_path}{file_name}", json_content)
-        # self.counting_status("category/TWLJP_3.json", save_dir="statistics/TWLJP_3/")
-        if is_filter:
-            filter_dict, total_delete =  self.check_filter_redo_data(    file_name="category/TWLJP_3.json", 
-                                            threshold = [{"name": "article", "number": 30}, {"name": "charges", "number": 30},],
-                                            reference_dir='statistics/TWLJP_3/',
-                                            save_dir = f"TWLJP/"
-                                        )
-        
-        # @ 存擋： TASK 4
-        file_name = "TWLJP_4.json"
-        json_content = "\n".join([json.dumps(item, ensure_ascii=False) for item in task_4])
-        self.save_to_file(f"{save_file_path}{file_name}", json_content)
-        # self.counting_status("category/TWLJP_4.json", save_dir="statistics/TWLJP_4/")
-        if is_filter:
-            filter_dict, total_delete = self.check_filter_redo_data(    
-                                            file_name="category/TWLJP_4.json", 
-                                            threshold = [{"name": "article", "number": 30}, {"name": "charges", "number": 30},],
-                                            reference_dir='statistics/TWLJP_4/',
-                                            save_dir = f"TWLJP/"
-                                        )
-        
-        
         # - 總結計算
         category_result = [
             f"TASK_1, {len(task_1)}",
             f"TASK_2, {len(task_2)}",
-            f"TASK_3, {len(task_3)}",
-            f"TASK_4, {len(task_4)}" 
         ]
         save_filter_file_path = f"{self.save_path}countLength_category.txt"
         self.save_to_file(save_filter_file_path, "\n".join(category_result))
@@ -610,8 +596,6 @@ class ProcessAILA:
         logging.info(f"[category_data] 從 {file_name} 總共取樣 {len(all_data)} 筆資料")
         logging.info(f"\t{category_result[0]}")
         logging.info(f"\t{category_result[1]}")
-        logging.info(f"\t{category_result[2]}")
-        logging.info(f"\t{category_result[3]}")
         
         print(f"[category_data] Done!")
         
@@ -622,12 +606,6 @@ class ProcessAILA:
         
         # -v- TWLJP: 2
         self.train_test_split(file_name="category/TWLJP_2.json", save_dir='TWLJP_2/', test_size=test_size, validation_size=validation_size)
-        
-        # -v- TWLJP: 3
-        self.train_test_split(file_name="category/TWLJP_3.json", save_dir='TWLJP_3/', test_size=test_size, validation_size=validation_size)
-        
-        # -v- TWLJP: 4
-        self.train_test_split(file_name="category/TWLJP_4.json", save_dir='TWLJP_4/', test_size=test_size, validation_size=validation_size)
         
         print(f"[category_train_test_split] Done!")
     
@@ -995,8 +973,7 @@ class ProcessAILA:
         """
         result = -1
     
-        if amount_count != 0 or imprisonment_count != 0:
-            result = 1
+        
         if '無罪' in line:
             result = 0
         if  '免刑' in line or '免訴' in line :
@@ -1006,12 +983,15 @@ class ProcessAILA:
         if  '裁定' in judgment_number:
             result = 4
             
+        if amount_count != 0 or imprisonment_count != 0:
+            result = 1
+            
         if result == -1 and line != '':
             logging.error(f"re_reason => {fileName} => main_text => {line}")
             
         return result
     
-    def re_penalty(self, _amounts=0, _imprisonments=0):
+    def re_is_fine_imprisonments(self, _amounts=0, _imprisonments=0):
         
         """
             (0) 無
@@ -1019,15 +999,17 @@ class ProcessAILA:
             (2) 罰金
             (3) 刑期＋罰金
         """
+
+        # Return: Fine, Imprisonments
         
         if _amounts == 0 and _imprisonments == 0:
-            return 0
+            return False, False, 0
         elif _amounts == 0 and _imprisonments != 0:
-            return 1
+            return False, True, 1
         elif _amounts != 0 and _imprisonments == 0:
-            return 2
+            return True, False, 2
         elif _amounts != 0 and _imprisonments != 0:
-            return 3
+            return True, True, 3
         
     def punishment(self, reason):
         
@@ -1104,6 +1086,11 @@ class ProcessAILA:
             
     # -v- 將 list 存到 file_path
     def save_to_file(self, file_path, content):
+        
+        # 檢查目錄是否存在
+        directory = path.dirname(file_path)
+        if not path.exists(directory):
+            makedirs(directory)  # 創建目錄
         
         with open(file_path, 'w', encoding='utf-8') as writeFile:
             writeFile.write(content)
@@ -1220,7 +1207,7 @@ class ProcessAILA:
     
     
     def statistics_to_excel(self):
-        base_folder = ["ori", "filter" , "TWLJP_1", "TWLJP_2", "TWLJP_3", "TWLJP_4"]
+        base_folder = ["ori", "filter" , "TWLJP_1", "TWLJP_2"]
         base_path = './data/processed/statistics/'
         
         def load_status_data(file_path):
@@ -1254,7 +1241,9 @@ class ProcessAILA:
                         file_path = path.join(subdir, file)
 
                         if file_path.endswith('_count.txt'):
-                            category_name = path.basename(file).split('_')[0]
+                            
+                            parts = path.basename(file).split('_')
+                            category_name = '_'.join(parts[:-1])
                             category_dict = load_status_data(file_path)
 
                             # 將字典轉換為 DataFrame

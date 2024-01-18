@@ -1,0 +1,4 @@
+no_match, 5817
+no_criminal, 3409
+no_reason, 13116
+[filter_TWLJP] 從 all_data.json 中，過濾資料: 376483 -> 336773  ( 刪掉過濾小於30 -2715, 濾掉其他資料 -36995)

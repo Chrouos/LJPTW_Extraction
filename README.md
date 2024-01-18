@@ -97,7 +97,8 @@ content_dict = {
     },
     
     "reason": reason,   # (0) 無罪  (1) 有罪 (2) 免刑 (3) 不受理 (4)裁定  (default = (-1) 未抓取成功 )
-    "penalty": penalty, # (0) 無 (1) 只有刑期 (2) 只有罰金 (3) 刑期＋罰金
+    "fine": is_fine,       # True(有罰金) False(無罰金)
+    "imprisonment": is_imprisonment,       # True(有刑期) False(無刑期)
     "punishment": self.punishment(reason),     # True(有罪)、False(無罪、免刑、不受理)
     
     "ori_indictment_content": content_split[0],
