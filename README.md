@@ -96,7 +96,8 @@ content_dict = {
         }
     },
     
-    "reason": reason,   # (0) 無罪  (1) 有罪 (2) 免刑 (3) 不受理 (4)裁定  (default = (-1) 未抓取成功 )
+    "reason": reason,   # (0) 無罪  (1) 有罪 (2) 免刑 (3) 不受理  (default = (-1) 未抓取成功 )
+    "penalty": penalty, # (0) 無 (1) 只有刑期 (2) 只有罰金 (3) 刑期＋罰金
     "fine": is_fine,       # True(有罰金) False(無罰金)
     "imprisonment": is_imprisonment,       # True(有刑期) False(無刑期)
     "punishment": self.punishment(reason),     # True(有罪)、False(無罪、免刑、不受理)
@@ -115,10 +116,8 @@ content_dict = {
 
 ### TWLJP 
 處理的 function: `category_data`
-+ TASK_1: (有罪)
-+ TASK_2: (刑期：只留下有刑期的部分，有罰金就不要)
-+ TASK_3: (罰金：只留下有罰金的部分，有刑期就不要)
-+ TASK_4: (罰金 + 刑期)
++ TASK_1: (所有檔案)
++ TASK_2: (只留下有罪的)
 
 
 ### 輸出格式: processed
@@ -128,11 +127,9 @@ content_dict = {
 │   ├── category # 任務分類目標
 │   │   ├── TWLJP_1.json
 │   │   ├── TWLJP_2.json
-│   │   ├── TWLJP_3.json
-│   │   └── TWLJP_4.json
 │   ├── filter_data.json
 │   ├── formal  # 正式訓練資料
-│   │   └── TWLJP_1, TWLJP_2, TWLJP_3, TWLJP_4
+│   │   └── TWLJP_1, TWLJP_2
 │   │       ├── count.txt # 統計 test, train, validation 筆數
 │   │       ├── test.json
 │   │       ├── train.json
@@ -141,7 +138,7 @@ content_dict = {
 ├── countLength_category.txt
 ├── countLength_source.txt
 statistics
-    ├── TWLJP_1, TWLJP_2, TWLJP_3, TWLJP_4
+    ├── TWLJP_1, TWLJP_2
     │   └── article, article_charge, charges, criminals, error, law, penalty, reason
     │       ├── {key}.txt           # 未包含數字的數據，純Key
     │       └── {key}_count.txt     # 統計數據數量
