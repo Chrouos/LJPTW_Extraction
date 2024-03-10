@@ -511,8 +511,8 @@ class ProcessAILA:
         # 獲取檔案 all_data 拆檔案
         
         all_data = self.load_data(file_name)
-        train_data, test_data = train_test_split(all_data, test_size=test_size, random_seed=random_seed) # 分割訓練集和測試集
-        train_data, validation_data = train_test_split(train_data, test_size=validation_size / (1 - test_size), random_seed=random_seed) # 再從訓練集中分割出驗證集
+        train_data, test_data = train_test_split(all_data, test_size=test_size, random_state=random_seed) # 分割訓練集和測試集
+        train_data, validation_data = train_test_split(train_data, test_size=validation_size / (1 - test_size), random_state=random_seed) # 再從訓練集中分割出驗證集
 
         # 將分割後的資料儲存為不同的檔案
         folder_path = f'{self.save_path}TWLJP/formal/{save_dir}'
