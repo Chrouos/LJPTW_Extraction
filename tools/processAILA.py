@@ -91,7 +91,6 @@ class ProcessAILA:
         print("[countLength_source] Done!")
         print(f"Save file to: {save_file_path}")
         
-        
     # -v- TWLJP
     def TWLJP_JSON(self):
         
@@ -214,7 +213,6 @@ class ProcessAILA:
         print(f"[TWLJP_JSON] Done!")
         print(f"Save file to: {save_file_path}{file_name}")
         
-
     # -v- 過濾資料
     def filter_TWLJP(self, 
                         threshold = [{"name": "article", "number": 30}, {"name": "charges", "number": 30},], 
@@ -311,7 +309,6 @@ class ProcessAILA:
         print(f"[filter_TWLJP] Done!")
         print(f"Save file to: {save_filter_file_path}")
         
-    
     def save_line_json_to_file(self, folder_name, file_name, line_json_list_data):
         
         save_file_path = f"{self.save_path}{folder_name}"
@@ -320,7 +317,6 @@ class ProcessAILA:
         self.save_to_file(f"{save_file_path}{file_name}", json_content)
         
         print(f"Save file to: {save_file_path}{file_name}")
-        
         
     def check_filter_redo_data(self, 
                                     file_name="filter_data.json", 
@@ -510,13 +506,13 @@ class ProcessAILA:
         print(f"[random_samples] Done!")
                 
     # -v- 拆檔案 test_size validation_size
-    def train_test_split(self, file_name="all_data.json", save_dir='', test_size=0.2, validation_size=0.1):
+    def train_test_split(self, file_name="all_data.json", save_dir='', test_size=0.2, validation_size=0.1, random_seed=42):
         
         # 獲取檔案 all_data 拆檔案
         
         all_data = self.load_data(file_name)
-        train_data, test_data = train_test_split(all_data, test_size=test_size) # 分割訓練集和測試集
-        train_data, validation_data = train_test_split(train_data, test_size=validation_size / (1 - test_size)) # 再從訓練集中分割出驗證集
+        train_data, test_data = train_test_split(all_data, test_size=test_size, random_seed=random_seed) # 分割訓練集和測試集
+        train_data, validation_data = train_test_split(train_data, test_size=validation_size / (1 - test_size), random_seed=random_seed) # 再從訓練集中分割出驗證集
 
         # 將分割後的資料儲存為不同的檔案
         folder_path = f'{self.save_path}TWLJP/formal/{save_dir}'
@@ -537,7 +533,6 @@ class ProcessAILA:
         with open(f'{folder_path}count.txt', 'w', encoding='utf-8') as file:
             for suffix, count in counts.items():
                 file.write(f'{suffix}, {count}\n')
-    
     
     # -v- TWLJP => 1, 2, 3
     def category_data(self, file_name="filter_data.json", is_filter=False):
@@ -599,15 +594,21 @@ class ProcessAILA:
         
         print(f"[category_data] Done!")
         
-        
-    def category_train_test_split(self, test_size=0.2, validation_size=0.1):
+    def category_train_test_split(self, test_size=0.2, validation_size=0.1, random_seed=42):
         # -v- TWLJP: 1
-        self.train_test_split(file_name="category/TWLJP_1.json", save_dir='TWLJP_1/', test_size=test_size, validation_size=validation_size)
+        self.train_test_split(file_name="category/TWLJP_1.json", save_dir='TWLJP_1/', test_size=test_size, validation_size=validation_size, random_seed=random_seed)
         
         # -v- TWLJP: 2
-        self.train_test_split(file_name="category/TWLJP_2.json", save_dir='TWLJP_2/', test_size=test_size, validation_size=validation_size)
+        self.train_test_split(file_name="category/TWLJP_2.json", save_dir='TWLJP_2/', test_size=test_size, validation_size=validation_size, random_seed=random_seed)
         
         print(f"[category_train_test_split] Done!")
+    
+    # -v- Json to Pickle
+    def json_to_pickle(self, file_path):
+        with open(file_path, 'r', encoding='utf-8') as file:
+            data = [json.loads(line) for line in file]
+        with open(file_path.replace('.json', '.pkl'), 'wb') as file:
+            pickle.dump(data, file)
     
     # ---------------------------------------------------------------------------------------------------- 判決書細項目
     def split_content_by_separator(self, content, separator):
@@ -1205,7 +1206,6 @@ class ProcessAILA:
                 
         return status_count
     
-    
     def statistics_to_excel(self):
         base_folder = ["ori", "filter" , "TWLJP_1", "TWLJP_2"]
         base_path = './data/processed/statistics/'
@@ -1272,7 +1272,6 @@ class Mode(Enum):
             return Mode.DOING
         else:
             return Mode.FORMAL_EXPECT_PROBLEM
-        
 
 class REASON(Enum):
     
